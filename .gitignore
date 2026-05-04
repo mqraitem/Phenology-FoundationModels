@@ -1,0 +1,35 @@
+# Data, outputs, checkpoints
+data/
+records/
+results/
+wandb/
+useco1/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Model weights
+*.pth
+*.pt
+*.ckpt
+
+# Logs
+*.log
+
+# Paper / Overleaf
+paper.pdf
+paper_latex/
+.overleaf_cookie
+.overleaf_project_id
+sync_to_overleaf.py
+
+# Editor / tooling
+.claude/
+
+# Notes / scratch
+Project.md
