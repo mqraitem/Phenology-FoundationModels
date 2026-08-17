@@ -22,8 +22,8 @@ from rasterio.warp import Resampling, reproject
 import torch
 from torch.utils.data import DataLoader
 
-from lib.dataloaders.dataloaders import CycleDataset
-from lib.dataloaders.dataloaders_pixellatlon import CycleDatasetPixelLatLon
+from lib.dataloaders.tile_dataset import TileDataset
+from lib.dataloaders.georeferenced_tile_dataset import GeoreferencedTileDataset
 from lib.stratified_analysis import masked_group_errors, neighbor_smoothness
 from lib.utils import get_data_paths, months_to_str
 from misc_scripts.build_student_test_tiles import MODEL_GROUPS, SELECTED_MONTHS, _predict_tile, _prepare_models
@@ -151,9 +151,9 @@ def main() -> None:
     )
 
     suffix = f"_m{months_to_str(SELECTED_MONTHS)}"
-    hls_dataset = CycleDataset(test_paths, split="testing", data_percentage=1.0,
+    hls_dataset = TileDataset(test_paths, split="testing", data_percentage=1.0,
                                n_timesteps=4, file_suffix=suffix)
-    presto_dataset = CycleDatasetPixelLatLon(
+    presto_dataset = GeoreferencedTileDataset(
         test_paths, split="testing", data_percentage=1.0,
         n_timesteps=4, file_suffix=suffix, skip_normalization=True,
     )

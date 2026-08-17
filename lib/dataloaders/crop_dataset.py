@@ -39,7 +39,7 @@ def load_raster_output(path):
 		return src.read()
 
 
-class CycleDatasetCrops(Dataset):
+class CropDataset(Dataset):
 	"""Random crop dataset: samples random spatial crops from random tiles.
 
 	Pre-loads all tiles into memory (normalized).

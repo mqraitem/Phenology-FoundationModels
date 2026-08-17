@@ -22,7 +22,7 @@ from lib.utils import (
     get_data_paths, get_masks_paper, eval_data_loader_crops,
     months_to_str, get_months_subdir, get_results_dir, build_model,
 )
-from lib.dataloaders.dataloaders import CycleDataset
+from lib.dataloaders.tile_dataset import TileDataset
 
 MONTH_SUBSETS = {
     4: [3, 6, 9, 12],
@@ -65,7 +65,7 @@ def main():
         dataloaders = {}
         for split_name, data_split in [("val", "validation"), ("test", "testing")]:
             data_path = get_data_paths(data_split, 1.0, selected_months)
-            dataset = CycleDataset(data_path, split=data_split, data_percentage=1.0,
+            dataset = TileDataset(data_path, split=data_split, data_percentage=1.0,
                                    n_timesteps=n_timesteps, file_suffix=file_suffix)
             dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=2)
             masks = get_masks_paper("train" if split_name == "val" else split_name)

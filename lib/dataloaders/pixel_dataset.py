@@ -40,7 +40,7 @@ def load_raster_output(path):
 
 # ===== Dataset =====
 
-class CycleDatasetPixels(Dataset):
+class PixelDataset(Dataset):
 	def __init__(self, data_dir, split, cache_path=None, data_percentage=1.0, target_size=330, regenerate=False, n_timesteps=12, file_suffix="", skip_normalization=False):
 		"""
 		Args:

@@ -28,8 +28,8 @@ from lib.utils import (
 	str2bool, months_to_str, get_checkpoint_dir,
 	get_data_paths, print_trainable_parameters,
 )
-from lib.dataloaders.dataloaders_crops import CycleDatasetCrops
-from lib.dataloaders.dataloaders import CycleDataset
+from lib.dataloaders.crop_dataset import CropDataset
+from lib.dataloaders.tile_dataset import TileDataset
 from arg_configs import get_core_parser, set_seed
 
 #######################################################################################
@@ -209,7 +209,7 @@ def main():
 		cfg_stds = None
 
 	# Crop dataset for training
-	cycle_dataset_train = CycleDatasetCrops(
+	cycle_dataset_train = CropDataset(
 		path_train, split="training",
 		crop_size=args.crop_size,
 		data_percentage=args.data_percentage,
@@ -220,10 +220,10 @@ def main():
 	)
 
 	# Standard tile datasets for val/test (sliding window eval)
-	cycle_dataset_val = CycleDataset(path_val, split="validation", data_percentage=args.data_percentage,
+	cycle_dataset_val = TileDataset(path_val, split="validation", data_percentage=args.data_percentage,
 	                                  means=cfg_means, stds=cfg_stds,
 	                                  n_timesteps=n_timesteps, file_suffix=file_suffix)
-	cycle_dataset_test = CycleDataset(path_test, split="testing", data_percentage=args.data_percentage,
+	cycle_dataset_test = TileDataset(path_test, split="testing", data_percentage=args.data_percentage,
 	                                   means=cfg_means, stds=cfg_stds,
 	                                   n_timesteps=n_timesteps, file_suffix=file_suffix)
 

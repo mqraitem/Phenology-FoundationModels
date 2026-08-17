@@ -6,7 +6,8 @@ misc_scripts/visualize_tile_predictions.py in --cache_only mode.
 
 Usage (on a GPU node):
     python misc_scripts/build_qualitative_cache.py \
-        [--ensemble_file data/ensembles/m3-6-9-12/all.json]
+        [--ensemble_file data/ensembles/m3-6-9-12/ensemble_all_e100.json] \
+        [--overwrite]
 """
 import argparse
 import os
@@ -26,12 +27,14 @@ def main():
                    default=[3, 6, 9, 12])
     p.add_argument("--models", type=str, nargs="+",
                    default=["transformer_1d_paper_1.0",
-                            "presto_1.0",
+                            "presto_full_lr_e100_1.0",
                             "prithvi_final_100m_crop32_1.0"])
     p.add_argument("--ensemble_file", type=str, default=None,
                    help="Ensemble JSON from ensemble_from_csvs.py. "
-                        "Defaults to data/ensembles/m<months_slug>/ensemble_all.json "
+                        "Defaults to data/ensembles/m<months_slug>/ensemble_all_e100.json "
                         "if that file exists; pass '' to skip ensemble.")
+    p.add_argument("--overwrite", action="store_true",
+                   help="Replace existing tile caches.")
     args = p.parse_args()
 
     tile_pairs = path_config.get_qual_tile_ids()
@@ -44,7 +47,7 @@ def main():
     # Resolve ensemble file default
     if args.ensemble_file is None:
         default_ens = os.path.join(_REPO_ROOT, "data", "ensembles",
-                                   f"m{months_slug}", "ensemble_all.json")
+                                   f"m{months_slug}", "ensemble_all_e100.json")
         if os.path.exists(default_ens):
             args.ensemble_file = default_ens
             print(f"Using default ensemble: {default_ens}")
@@ -64,6 +67,8 @@ def main():
     ]
     if args.ensemble_file:
         cmd += ["--ensemble_file", args.ensemble_file]
+    if args.overwrite:
+        cmd.append("--overwrite")
 
     print("Running:", " ".join(cmd))
     subprocess.run(cmd, check=True, cwd=_REPO_ROOT)

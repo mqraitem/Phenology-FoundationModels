@@ -34,8 +34,8 @@ from lib.utils import (
 	eval_data_loader, get_masks_paper, print_trainable_parameters,
 	save_checkpoint, str2bool, months_to_str, get_checkpoint_dir, get_data_paths,
 )
-from lib.dataloaders.dataloaders_pixels import CycleDatasetPixels
-from lib.dataloaders.dataloaders import CycleDataset
+from lib.dataloaders.pixel_dataset import PixelDataset
+from lib.dataloaders.tile_dataset import TileDataset
 from arg_configs import get_core_parser, set_seed
 
 #######################################################################################
@@ -94,18 +94,18 @@ def main():
 	path_test = get_data_paths("testing", args.data_percentage, args.selected_months)
 
 	# Training: pixel-level (all pixels)
-	cycle_dataset_train = CycleDatasetPixels(
+	cycle_dataset_train = PixelDataset(
 		path_train, split="training",
 		data_percentage=args.data_percentage, n_timesteps=n_timesteps,
 		file_suffix=file_suffix,
 	)
 	# Eval: full tiles (no subsampling)
-	cycle_dataset_val = CycleDataset(
+	cycle_dataset_val = TileDataset(
 		path_val, split="validation",
 		data_percentage=args.data_percentage, n_timesteps=n_timesteps,
 		file_suffix=file_suffix,
 	)
-	cycle_dataset_test = CycleDataset(
+	cycle_dataset_test = TileDataset(
 		path_test, split="testing",
 		data_percentage=args.data_percentage, n_timesteps=n_timesteps,
 		file_suffix=file_suffix,

@@ -59,7 +59,7 @@ def load_raster_output(path):
 		return img
 
 
-class CycleDataset(Dataset):
+class TileDataset(Dataset):
 	def __init__(self,path,split, data_percentage=1.0, means=None, stds=None, n_timesteps=12, file_suffix="", skip_normalization=False):
 
 

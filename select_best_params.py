@@ -22,8 +22,8 @@ import path_config
 import sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from lib.utils import get_data_paths, eval_data_loader, eval_data_loader_crops, eval_data_loader_presto, get_masks_paper, str2bool, months_to_str, get_months_subdir, get_results_dir, build_model
-from lib.dataloaders.dataloaders import CycleDataset
-from lib.dataloaders.dataloaders_pixellatlon import CycleDatasetPixelLatLon
+from lib.dataloaders.tile_dataset import TileDataset
+from lib.dataloaders.georeferenced_tile_dataset import GeoreferencedTileDataset
 
 #######################################################################################
 
@@ -140,11 +140,11 @@ def main():
 
 		if is_presto:
 			path_val = get_data_paths("validation", data_percentage, selected_months)
-			cycle_dataset_val = CycleDatasetPixelLatLon(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
+			cycle_dataset_val = GeoreferencedTileDataset(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
 			val_dataloader = DataLoader(cycle_dataset_val, batch_size=1, shuffle=False, num_workers=2)
 		else:
 			path_val = get_data_paths("validation", data_percentage, selected_months)
-			cycle_dataset_val = CycleDataset(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix)
+			cycle_dataset_val = TileDataset(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix)
 			orig_means = cycle_dataset_val.means.copy()
 			orig_stds  = cycle_dataset_val.stds.copy()
 			val_dataloader = DataLoader(cycle_dataset_val, batch_size=batch_size, shuffle=False, num_workers=2)
