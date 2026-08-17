@@ -14,8 +14,6 @@ os.environ["MKL_NUM_THREADS"] = "4"
 from lib.utils import get_data_paths, months_to_str
 from lib.dataloaders.dataloaders_pixels import CycleDatasetPixels
 from lib.dataloaders.dataloaders_crops import CycleDatasetCrops
-from lib.dataloaders.dataloaders import CycleDataset
-from lib.dataloaders.dataloaders_pixels_subsampled import CycleDatasetPixelsSubsampled
 from lib.dataloaders.dataloaders_pixels_pixellatlon import CycleDatasetPixelsPixelLatLon
 
 MONTH_SUBSETS = [
@@ -76,17 +74,6 @@ for selected_months in MONTH_SUBSETS:
     )
     print(f"  HLS pixels (pixellatlon): {len(pixel_ds_ll)} samples")
     del pixel_ds_ll
-
-    # 5. HLS subsampled pixel cache (for paper-matched transformer)
-    print(f"\n--- HLS subsampled pixel cache (stride={CycleDatasetPixelsSubsampled.PIXEL_STRIDE}) ---")
-    pixel_ds_sub = CycleDatasetPixelsSubsampled(
-        path_train_hls, split="training",
-        data_percentage=DATA_PERCENTAGE,
-        n_timesteps=n_timesteps,
-        file_suffix=file_suffix,
-    )
-    print(f"  HLS subsampled pixels (stride={CycleDatasetPixelsSubsampled.PIXEL_STRIDE}): {len(pixel_ds_sub)} samples")
-    del pixel_ds_sub
 
 print(f"\n{'='*60}")
 print("  All caches regenerated successfully!")

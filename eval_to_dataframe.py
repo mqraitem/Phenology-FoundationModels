@@ -8,9 +8,8 @@ import argparse
 import pandas as pd
 import path_config
 
-from lib.utils import get_masks_paper, eval_data_loader_df, eval_data_loader_crops_df, eval_data_loader_presto_df, get_data_paths, get_data_paths_s2, str2bool, months_to_str, get_months_subdir, get_results_dir, build_model
+from lib.utils import get_masks_paper, eval_data_loader_df, eval_data_loader_crops_df, eval_data_loader_presto_df, get_data_paths, str2bool, months_to_str, get_months_subdir, get_results_dir, build_model
 from lib.dataloaders.dataloaders import CycleDataset
-from lib.dataloaders.dataloaders_s2 import CycleDatasetS2
 from lib.dataloaders.dataloaders_pixellatlon import CycleDatasetPixelLatLon
 
 #######################################################################################
@@ -23,6 +22,8 @@ def main():
 						help="Dataset split to evaluate on (train/val/test)")
 	parser.add_argument("--selected_months", type=int, nargs="+", default=[3, 6, 9, 12],
 						help="Which months to use (e.g., 3 6 9 12)")
+	parser.add_argument("--model-groups", nargs="+", default=None,
+						help="Optional exact model-group names to evaluate")
 	args = parser.parse_args()
 
 	selected_months = args.selected_months
@@ -39,6 +40,9 @@ def main():
 	model_dirs = [d for d in os.listdir(results_base)
 	              if os.path.isdir(os.path.join(results_base, d))
 	              and os.path.exists(os.path.join(results_base, d, "best_params.csv"))]
+	if args.model_groups is not None:
+		requested = set(args.model_groups)
+		model_dirs = [d for d in model_dirs if d in requested]
 
 	# For val/train splits, only evaluate the models used in ensembles
 	ensemble_models = ["prithvi_final_100m_crop32", "transformer_1d_paper", "presto"]
@@ -71,7 +75,6 @@ def main():
 		file_suffix = f"_m{months_str}"
 
 		is_presto = "presto" in group
-		uses_s2 = "transformer_1d_s2" in group
 
 		selected_months_0idx = [m - 1 for m in selected_months]
 		month_tensor = torch.tensor(selected_months_0idx, dtype=torch.long)
@@ -99,16 +102,7 @@ def main():
 				print(f"Skipping: {e}")
 				continue
 
-			if uses_s2:
-				data_path = get_data_paths_s2(data_split, data_percentage, selected_months)
-				cycle_dataset = CycleDatasetS2(data_path, split=data_split, data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=False)
-				data_loader = DataLoader(cycle_dataset, batch_size=1, shuffle=False, num_workers=2)
-
-				model = model.to(device)
-				model.load_state_dict(ckpt["model_state_dict"])
-
-				out_df = eval_data_loader_df(data_loader, model, device, get_masks_paper(data_loader_name))
-			elif is_presto:
+			if is_presto:
 				data_path = get_data_paths(data_split, data_percentage, selected_months)
 				cycle_dataset = CycleDatasetPixelLatLon(data_path, split=data_split, data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
 				data_loader = DataLoader(cycle_dataset, batch_size=1, shuffle=False, num_workers=2)

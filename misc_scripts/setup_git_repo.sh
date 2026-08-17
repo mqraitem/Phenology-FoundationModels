@@ -27,7 +27,6 @@ git add \
     train_presto.py \
     train_prithvi.py \
     train_transformer_1d_paper.py \
-    train_transformer_1d_paper_s2.py \
     results_overview_notebook.ipynb
 
 # --- Library code ---

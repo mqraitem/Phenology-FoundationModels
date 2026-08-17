@@ -21,9 +21,8 @@ import pandas as pd
 import path_config
 import sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
-from lib.utils import get_data_paths, get_data_paths_s2, eval_data_loader, eval_data_loader_crops, eval_data_loader_presto, get_masks_paper, str2bool, months_to_str, get_months_subdir, get_results_dir, build_model
+from lib.utils import get_data_paths, eval_data_loader, eval_data_loader_crops, eval_data_loader_presto, get_masks_paper, str2bool, months_to_str, get_months_subdir, get_results_dir, build_model
 from lib.dataloaders.dataloaders import CycleDataset
-from lib.dataloaders.dataloaders_s2 import CycleDatasetS2
 from lib.dataloaders.dataloaders_pixellatlon import CycleDatasetPixelLatLon
 
 #######################################################################################
@@ -36,16 +35,13 @@ def strip_seed_from_filename(filename):
 	return re.sub(r'_seed-\d+\.pth$', '', filename)
 
 
-def eval_checkpoint(model, device, is_presto, uses_s2, crop_size,
+def eval_checkpoint(model, device, is_presto, crop_size,
                     val_dataloader, cycle_dataset_val, orig_means, orig_stds,
                     params, month_tensor=None):
 	"""Evaluate a single checkpoint and return mean val MAE."""
 	if is_presto:
 		acc, _, _ = eval_data_loader_presto(val_dataloader, model, device,
 		            get_masks_paper("train"), month=month_tensor, pixel_weighted=False)
-	elif uses_s2:
-		acc, _, _ = eval_data_loader(val_dataloader, model, device,
-		            get_masks_paper("train"), pixel_weighted=False)
 	else:
 		use_config_norm = "_confignorm-True" in params
 		if use_config_norm:
@@ -103,7 +99,6 @@ def main():
 		group = group_name
 		data_percentage = group.split("_")[-1]
 		is_presto = "presto" in group
-		uses_s2 = "transformer_1d_s2" in group
 
 		# Skip if best_params.csv already exists (unless --force)
 		results_dir = get_results_dir(selected_months, group_name=group_name)
@@ -143,11 +138,7 @@ def main():
 		orig_means = None
 		orig_stds = None
 
-		if uses_s2:
-			path_val = get_data_paths_s2("validation", data_percentage, selected_months)
-			cycle_dataset_val = CycleDatasetS2(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=False)
-			val_dataloader = DataLoader(cycle_dataset_val, batch_size=1, shuffle=False, num_workers=2)
-		elif is_presto:
+		if is_presto:
 			path_val = get_data_paths("validation", data_percentage, selected_months)
 			cycle_dataset_val = CycleDatasetPixelLatLon(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
 			val_dataloader = DataLoader(cycle_dataset_val, batch_size=1, shuffle=False, num_workers=2)
@@ -186,7 +177,7 @@ def main():
 				model = model.to(device)
 				model.load_state_dict(torch.load(checkpoint)["model_state_dict"])
 
-				mae = eval_checkpoint(model, device, is_presto, uses_s2, crop_size,
+				mae = eval_checkpoint(model, device, is_presto, crop_size,
 				                      val_dataloader, cycle_dataset_val, orig_means, orig_stds,
 				                      params, month_tensor)
 

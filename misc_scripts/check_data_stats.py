@@ -1,10 +1,7 @@
-"""Check per-band input and output statistics (mean/std/min/max) before and after normalization.
-
-Covers both HLS and Sentinel-2 data sources using the existing dataloaders.
+"""Check HLS input and output statistics before and after normalization.
 
 Usage:
     python check_data_stats.py --selected_months 3 6 9 12
-    python check_data_stats.py --selected_months 3 6 9 12 --source s2
     python check_data_stats.py --selected_months 1 2 3 4 5 6 7 8 9 10 11 12 --split validation
     python check_data_stats.py --selected_months 3 6 9 12 --max_tiles 50
 """
@@ -19,7 +16,7 @@ import argparse
 import numpy as np
 from tqdm import tqdm
 
-from lib.utils import get_data_paths, get_data_paths_s2, normalize_doy, compute_or_load_means_stds
+from lib.utils import get_data_paths, normalize_doy, compute_or_load_means_stds
 
 
 def load_raster_hls(path, target_size=330):
@@ -42,39 +39,6 @@ def load_raster_hls_for_stats(path, crop=None):
     else:
         img = np.zeros((6, 330, 330))
     return img
-
-
-CLOUD_SCORE_BAND = 7
-CLOUD_THRESHOLD = 3000
-
-
-def load_raster_s2(path, target_size=330):
-    import rasterio
-    if os.path.exists(path):
-        with rasterio.open(path) as src:
-            img = src.read()  # (8, 990, 990)
-        C, H, W = img.shape
-        new_h, new_w = H // 3, W // 3
-        img = img[:, :new_h*3, :new_w*3].reshape(C, new_h, 3, new_w, 3).mean(axis=(2, 4))
-        cloud_mask = img[CLOUD_SCORE_BAND] < CLOUD_THRESHOLD
-        img[:6, cloud_mask] = 0
-        return img[:6].astype(np.float32)
-    else:
-        return np.zeros((6, target_size, target_size), dtype=np.float32)
-
-
-def load_raster_s2_raw(path, target_size=330):
-    """Load S2 composite with all 8 bands (including cloud scores), downsampled 3x."""
-    import rasterio
-    if os.path.exists(path):
-        with rasterio.open(path) as src:
-            img = src.read()  # (8, 990, 990)
-        C, H, W = img.shape
-        new_h, new_w = H // 3, W // 3
-        img = img[:, :new_h*3, :new_w*3].reshape(C, new_h, 3, new_w, 3).mean(axis=(2, 4))
-        return img.astype(np.float32)  # (8, 330, 330)
-    else:
-        return np.zeros((8, target_size, target_size), dtype=np.float32)
 
 
 CORRECT_INDICES = [i - 1 for i in [2, 5, 8, 11]]
@@ -153,8 +117,6 @@ def main():
     parser.add_argument("--selected_months", type=int, nargs="+", default=[3, 6, 9, 12])
     parser.add_argument("--split", type=str, default="training",
                         choices=["training", "validation", "testing"])
-    parser.add_argument("--source", type=str, default="hls", choices=["hls", "s2"],
-                        help="Data source: hls or s2")
     parser.add_argument("--max_tiles", type=int, default=0,
                         help="Max tiles to process (0 = all)")
     parser.add_argument("--exclude_dead", action="store_true",
@@ -165,28 +127,19 @@ def main():
     file_suffix = f"_m{months_str}"
     n_timesteps = len(args.selected_months)
 
-    print(f"Source: {args.source.upper()}")
+    print("Source: HLS")
     print(f"Split: {args.split}")
     print(f"Months: {args.selected_months}")
     print(f"Exclude dead pixels: {args.exclude_dead}")
 
-    # Get data paths
-    if args.source == "hls":
-        data_paths = get_data_paths(args.split, data_percentage=1.0,
-                                    selected_months=args.selected_months)
-        load_fn = load_raster_hls
-        # Get normalization means/stds
-        means, stds = compute_or_load_means_stds(
-            data_dir=data_paths, split=args.split, data_percentage=1.0,
-            num_bands=6, load_raster_fn=load_raster_hls_for_stats,
-            file_suffix=file_suffix,
-        )
-    else:
-        data_paths = get_data_paths_s2(args.split, data_percentage=1.0,
-                                       selected_months=args.selected_months)
-        load_fn = load_raster_s2
-        means = None  # S2/Presto normalizes internally
-        stds = None
+    data_paths = get_data_paths(args.split, data_percentage=1.0,
+                                selected_months=args.selected_months)
+    load_fn = load_raster_hls
+    means, stds = compute_or_load_means_stds(
+        data_dir=data_paths, split=args.split, data_percentage=1.0,
+        num_bands=6, load_raster_fn=load_raster_hls_for_stats,
+        file_suffix=file_suffix,
+    )
 
     n_tiles = len(data_paths)
     if args.max_tiles > 0:
@@ -210,35 +163,8 @@ def main():
     total_pixels = 0
     total_dead = 0
 
-    # Per-month cloud masking stats (S2 only)
-    # Per-band count of pixels > 10000 (S2 only)
-    if args.source == "s2":
-        cloud_stats = {m: {"total": 0, "masked": 0, "nodata": 0} for m in args.selected_months}
-        above_10k = {"total": [0] * num_bands, "count": [0] * num_bands}
-
     for i in tqdm(range(n_tiles), desc="Processing tiles"):
         image_paths, gt_path, tile_name = data_paths[i]
-
-        # Per-month cloud masking and >10000 stats (S2 only): read raw 8-band images
-        if args.source == "s2":
-            for t_idx, path in enumerate(image_paths):
-                month = args.selected_months[t_idx]
-                raw = load_raster_s2_raw(path)  # (8, 330, 330)
-                H, W = raw.shape[1], raw.shape[2]
-                n_px = H * W
-                nodata = (raw[:6] == 0).all(axis=0)  # (330, 330)
-                cloud_score = raw[CLOUD_SCORE_BAND]
-                cloudy = (cloud_score < CLOUD_THRESHOLD) & ~nodata
-                cloud_stats[month]["total"] += n_px
-                cloud_stats[month]["masked"] += int(cloudy.sum())
-                cloud_stats[month]["nodata"] += int(nodata.sum())
-
-                # Count per-band pixels > 10000 (excluding nodata)
-                for b in range(num_bands):
-                    band = raw[b]
-                    valid = ~nodata
-                    above_10k["total"][b] += int(valid.sum())
-                    above_10k["count"][b] += int((band[valid] > 10000).sum())
 
         # Load images
         imgs = [load_fn(p)[:, np.newaxis] for p in image_paths]
@@ -308,7 +234,7 @@ def main():
 
     # --- Print results ---
     print(f"\n{'#' * 70}")
-    print(f"  DATA STATISTICS REPORT — {args.source.upper()}")
+    print("  DATA STATISTICS REPORT — HLS")
     print(f"  Split: {args.split} | Months: {args.selected_months}")
     print(f"  Tiles: {n_tiles} | Total pixels: {total_pixels:,}")
     print(f"  Dead pixels: {total_dead:,} ({100*total_dead/max(total_pixels,1):.2f}%)")
@@ -320,7 +246,7 @@ def main():
     raw_input_dict = {band_names[b]: input_raw_stats[b].result() for b in range(num_bands)}
     print_stats_table("INPUT — Raw (before normalization)", raw_input_dict)
 
-    # Input normalized (HLS only)
+    # Input normalized
     if input_norm_stats is not None:
         norm_input_dict = {band_names[b]: input_norm_stats[b].result() for b in range(num_bands)}
         print_stats_table("INPUT — Normalized (after mean/std normalization)", norm_input_dict)
@@ -330,9 +256,6 @@ def main():
         for b in range(num_bands):
             print(f"    Band {b}: mean={means[b]:.4f}, std={stds[b]:.4f}")
         print()
-    else:
-        print(f"\n  [S2 data — no dataset-level normalization applied (Presto normalizes internally)]\n")
-
     # GT raw
     raw_gt_dict = {DATE_NAMES[d]: gt_raw_stats[d].result() for d in range(4)}
     print_stats_table("OUTPUT/GT — Raw DOY values (before normalization)", raw_gt_dict)
@@ -340,35 +263,6 @@ def main():
     # GT normalized
     norm_gt_dict = {DATE_NAMES[d]: gt_norm_stats[d].result() for d in range(4)}
     print_stats_table("OUTPUT/GT — Normalized (DOY / 547)", norm_gt_dict)
-
-    # Per-month cloud masking report (S2 only)
-    if args.source == "s2":
-        print(f"\n{'=' * 70}")
-        print(f"  PER-MONTH CLOUD MASKING (median_cs < {CLOUD_THRESHOLD})")
-        print(f"{'=' * 70}")
-        print(f"  {'Month':>5s}  {'Total px':>12s}  {'Masked':>12s}  {'% Masked':>10s}  {'Nodata':>12s}  {'% Nodata':>10s}")
-        print(f"  {'-'*5}  {'-'*12}  {'-'*12}  {'-'*10}  {'-'*12}  {'-'*10}")
-        for m in args.selected_months:
-            s = cloud_stats[m]
-            valid = s["total"] - s["nodata"]
-            pct_masked = 100 * s["masked"] / valid if valid > 0 else 0
-            pct_nodata = 100 * s["nodata"] / s["total"] if s["total"] > 0 else 0
-            print(f"  {m:>5d}  {s['total']:>12,}  {s['masked']:>12,}  {pct_masked:>9.2f}%  {s['nodata']:>12,}  {pct_nodata:>9.2f}%")
-        print()
-
-        # Per-band percentage of pixels > 10000
-        print(f"{'=' * 70}")
-        print(f"  PER-BAND PIXELS > 10000 (raw S2 reflectance, excluding nodata)")
-        print(f"{'=' * 70}")
-        print(f"  {'Band':>6s}  {'Valid px':>12s}  {'> 10000':>12s}  {'%':>10s}")
-        print(f"  {'-'*6}  {'-'*12}  {'-'*12}  {'-'*10}")
-        for b in range(num_bands):
-            total = above_10k["total"][b]
-            count = above_10k["count"][b]
-            pct = 100 * count / total if total > 0 else 0
-            print(f"  {band_names[b]:>6s}  {total:>12,}  {count:>12,}  {pct:>9.2f}%")
-        print()
-
 
 if __name__ == "__main__":
     main()
