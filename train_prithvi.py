@@ -26,7 +26,7 @@ from lib.utils import (
 	segmentation_loss, segmentation_loss_mae,
 	eval_data_loader_crops, get_masks_paper, save_checkpoint,
 	str2bool, months_to_str, get_checkpoint_dir,
-	get_data_paths, print_trainable_parameters, get_layer_lr_groups,
+	get_data_paths, print_trainable_parameters,
 )
 from lib.dataloaders.dataloaders_crops import CycleDatasetCrops
 from lib.dataloaders.dataloaders import CycleDataset

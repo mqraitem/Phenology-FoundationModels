@@ -111,7 +111,6 @@ def main():
         "layer_decay": args.layer_decay,
         "warmup_epochs": args.warmup_epochs,
         "min_lr": args.min_lr,
-        "input_mode": "hls",
         "feed_timeloc": args.feed_timeloc,
         "timeloc_mode": args.timeloc_mode,
         "dropout": args.dropout,
@@ -166,7 +165,7 @@ def main():
     train_targets = train_targets.pin_memory()
     train_latlons = train_latlons.pin_memory()
 
-    model = PrestoPhenologyModel(num_classes=4, freeze_encoder=args.freeze_encoder, input_mode="hls",
+    model = PrestoPhenologyModel(num_classes=4, freeze_encoder=args.freeze_encoder,
                               feed_timeloc=args.feed_timeloc, timeloc_mode=args.timeloc_mode,
                               dropout=args.dropout,
                               p_loc_drop=args.p_loc_drop,

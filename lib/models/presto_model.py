@@ -4,74 +4,25 @@ Presto Phenology model for crop phenology prediction.
 Key features:
   - Pretrained Presto encoder with band-group tokenization
   - Sigmoid output
-  - Per-pixel lat/lon support (computed from rasterio transform)
+  - Per-pixel lat/lon support
   - Optional NDVI as additional band group
 """
 
 import torch
 import torch.nn as nn
-import numpy as np
-
 from lib.models.presto.presto.presto import Presto
-
-from collections import OrderedDict
-BANDS_GROUPS_IDX = OrderedDict({
-    "S1": [0, 1],
-    "S2_RGB": [2, 3, 4],
-    "S2_Red_Edge": [5, 6, 7],
-    "S2_NIR_10m": [8],
-    "S2_NIR_20m": [9],
-    "S2_SWIR": [10, 11],
-    "ERA5": [12, 13],
-    "SRTM": [14, 15],
-    "NDVI": [16],
-})
 
 NDVI_IDX = 16
 NUM_NORMED_BANDS = 17
 DW_MISSING = 9
-
-S2_TO_NORMED = [2, 3, 4, 9, 10, 11]
-S2_NIR_LOCAL = 3
-S2_RED_LOCAL = 2
 
 HLS_TO_NORMED = [2, 3, 4, 9, 10, 11]
 HLS_NIR_LOCAL = 3
 HLS_RED_LOCAL = 2
 
 
-def compute_pixel_latlons(raster_path, H=330, W=330):
-    """Compute per-pixel lat/lon from a rasterio file's transform and CRS.
-
-    Args:
-        raster_path: path to any GeoTIFF for this tile
-        H, W: spatial dimensions
-
-    Returns:
-        latlons: (H, W, 2) numpy array of [lat, lon] per pixel
-    """
-    import rasterio
-    from rasterio.warp import transform as warp_transform
-
-    with rasterio.open(raster_path) as src:
-        tile_crs = src.crs
-        tile_transform = src.transform
-
-    rows, cols = np.meshgrid(np.arange(H), np.arange(W), indexing='ij')
-    xs = tile_transform.c + (cols + 0.5) * tile_transform.a
-    ys = tile_transform.f + (rows + 0.5) * tile_transform.e
-
-    xs_flat = xs.ravel().tolist()
-    ys_flat = ys.ravel().tolist()
-    lons, lats = warp_transform(tile_crs, 'EPSG:4326', xs_flat, ys_flat)
-
-    latlons = np.stack([np.array(lats).reshape(H, W),
-                        np.array(lons).reshape(H, W)], axis=-1)
-    return latlons.astype(np.float32)
-
-
 class PrestoPhenologyModel(nn.Module):
-    def __init__(self, num_classes=4, freeze_encoder=False, input_mode="hls", feed_timeloc=False,
+    def __init__(self, num_classes=4, freeze_encoder=False, feed_timeloc=False,
                  timeloc_mode=None, dropout=0.0, p_loc_drop=0.0,
                  pretrained=True, use_ndvi=False):
         """
@@ -82,8 +33,6 @@ class PrestoPhenologyModel(nn.Module):
         """
         super().__init__()
 
-        assert input_mode in ("s2", "hls"), f"Unknown input_mode: {input_mode}"
-        self.input_mode = input_mode
         self.p_loc_drop = p_loc_drop
         self.use_ndvi = use_ndvi
 
@@ -93,14 +42,9 @@ class PrestoPhenologyModel(nn.Module):
         else:
             self.timeloc_mode = "both" if feed_timeloc else "none"
 
-        if input_mode == "s2":
-            self.band_indices = S2_TO_NORMED
-            self.nir_local = S2_NIR_LOCAL
-            self.red_local = S2_RED_LOCAL
-        else:
-            self.band_indices = HLS_TO_NORMED
-            self.nir_local = HLS_NIR_LOCAL
-            self.red_local = HLS_RED_LOCAL
+        self.band_indices = HLS_TO_NORMED
+        self.nir_local = HLS_NIR_LOCAL
+        self.red_local = HLS_RED_LOCAL
 
         if pretrained:
             base_model = Presto.load_pretrained()
@@ -124,27 +68,6 @@ class PrestoPhenologyModel(nn.Module):
                 param.requires_grad_(True)
 
         self.sigmoid = nn.Sigmoid()
-        self.register_buffer("_location_codebook", None)
-
-    def set_location_codebook(self, centers):
-        if not isinstance(centers, torch.Tensor):
-            centers = torch.tensor(centers, dtype=torch.float32)
-        self.register_buffer("_location_codebook", centers)
-
-    def _snap_tile_latlons(self, latlons):
-        """Shift each tile's per-pixel lat/lon grid so its centroid lands on the
-        nearest training-tile centroid. Preserves within-tile spatial structure
-        while ensuring the model only sees coordinate ranges it saw at training
-        time. `latlons` is (B, H, W, 2)."""
-        if self._location_codebook is None:
-            return latlons
-        # (B, 2) tile centroids from per-pixel latlons
-        tile_centroids = latlons.float().reshape(latlons.shape[0], -1, 2).mean(dim=1)
-        dists = torch.cdist(tile_centroids, self._location_codebook.float())
-        nearest = self._location_codebook[dists.argmin(dim=1)]  # (B, 2)
-        shift = (nearest - tile_centroids).view(latlons.shape[0], 1, 1, 2)
-        return latlons + shift
-
     def _prepare_presto_inputs(self, data, latlons, month=None):
         """Prepare inputs for Presto encoder."""
         B, T, C = data.shape
@@ -220,12 +143,6 @@ class PrestoPhenologyModel(nn.Module):
                 latlons = latlons.to(device)
                 assert latlons.dim() == 4, f"Expected 4D per-pixel latlons, got {latlons.shape}"
                 H_ll, W_ll = latlons.shape[1], latlons.shape[2]
-
-                # Tile-level snap on the *unpadded* region, otherwise zero-padding
-                # corrupts the centroid and the snap picks the wrong training tile.
-                feed_loc = self.timeloc_mode in ("location", "both")
-                if feed_loc and self._location_codebook is not None:
-                    latlons = self._snap_tile_latlons(latlons)
 
                 if H_ll < H or W_ll < W:
                     padded = torch.zeros(B, H, W, 2, device=device)

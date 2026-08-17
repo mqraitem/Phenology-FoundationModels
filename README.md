@@ -23,7 +23,7 @@ Prithvi EO V2 backbone (`100m`, `300m`, or `tiny`) feeding a Conv3D upscaler + l
 ### Presto (`train_presto.py`)
 Presto pixel-level transformer encoder with a linear head, on Sentinel-2 (B2, B3, B4, B8A, B11, B12). S2 is 3x3 block-averaged 10m → 30m to match the GT grid; pixels with median cloud score ≥ 3000 are masked. Encoder can be frozen (`--freeze_encoder`) or fine-tuned. Optional location dropout (`--p_loc_drop`) and NDVI augmentation (`--use_ndvi`).
 
-> The Presto code under `lib/models/presto/` is a lightly-modified vendored copy of [nasaharvest/presto](https://github.com/nasaharvest/presto); see `lib/models/presto/VENDORED.md`.
+> `lib/models/presto/` contains the lightly modified model-runtime subset of [nasaharvest/presto](https://github.com/nasaharvest/presto); see `lib/models/presto/VENDORED.md`.
 
 ### Temporal Transformer (`train_transformer_1d_paper.py`)
 Per-pixel 1D transformer over the HLS spectral time series. Configurable via `--d_model`, `--num_layers`, `--nhead`, `--dropout`.
@@ -35,9 +35,10 @@ Per-pixel 1D transformer over the HLS spectral time series. Configurable via `--
 - `timm`, `einops`, `rasterio`, `wandb`, `geopandas`, `scipy`, `pandas`, `seaborn`
 
 ### Vendored Presto
-The Presto code under `lib/models/presto/` is a vendored copy of [nasaharvest/presto](https://github.com/nasaharvest/presto) with small local modifications to avoid the `earthengine-api` / `openmapflow` dependencies — see `lib/models/presto/VENDORED.md` for details. It is checked into this repo directly; no submodule init is required.
-
-Presto's own dependencies are still needed for `train_presto.py`; install them per the upstream Presto README, ideally in a dedicated conda environment.
+The model-runtime subset under `lib/models/presto/` is included directly, with
+small local modifications that avoid the unused Earth Engine and OpenMapFlow
+pipelines. It requires PyTorch, Einops, NumPy, and python-dateutil. See
+`lib/models/presto/VENDORED.md` for provenance and modifications.
 
 ### Configuration
 

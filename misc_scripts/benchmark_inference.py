@@ -188,7 +188,7 @@ def benchmark_presto(T, n_tiles, device, chunk_size=None):
 
     model = PrestoPhenologyModel(
         num_classes=N_CLASSES, freeze_encoder=False,
-        input_mode="hls", feed_timeloc=True,
+        feed_timeloc=True,
     ).to(device).eval()
 
     # Dummy month and latlons
@@ -280,7 +280,7 @@ def benchmark_ensemble(T, n_tiles, device, transformer_cs=1000, presto_cs=2048, 
 
     presto = PrestoPhenologyModel(
         num_classes=N_CLASSES, freeze_encoder=False,
-        input_mode="hls", feed_timeloc=True,
+        feed_timeloc=True,
     ).to(device).eval()
     presto = torch.compile(presto)
 

@@ -709,79 +709,6 @@ def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, filename, sel
 	torch.save(checkpoint, filename)
 	print(f"Checkpoint saved at {filename}")
 	
-def get_layer_lr_groups(model, head_lr, backbone_lr, layer_decay=0.75):
-	"""Build per-layer param groups with geometrically decaying LR.
-
-	Later backbone layers get higher LR (closer to backbone_lr),
-	earlier layers get lower LR (backbone_lr * decay^distance_from_top).
-
-	Works with both PrithviSegConv3DMultiScale (PrithviBackbone) and mosaic models
-	(MaskedPrithviBackbone) since both expose encoder blocks via
-	model.backbone.model.encoder.blocks.
-
-	Args:
-		model: a PrithviSeg* model with .backbone, .reshaper, .head
-		head_lr: learning rate for head (and reshaper)
-		backbone_lr: peak learning rate for the last backbone block
-		layer_decay: multiplicative decay per layer (0-1)
-
-	Returns:
-		list of param group dicts for the optimizer
-	"""
-	encoder = model.backbone.model.encoder
-	num_layers = len(encoder.blocks)
-
-	param_groups = []
-	seen_params = set()
-
-	# 1) Head parameters — full learning rate
-	head_params = list(model.head.parameters())
-	if head_params:
-		param_groups.append({
-			'params': head_params,
-			'lr': head_lr,
-			'name': 'head',
-		})
-		seen_params.update(id(p) for p in head_params)
-
-	# 2) Reshaper parameters (PrithviReshape3D has none, but future-proof)
-	reshaper_params = [p for p in model.reshaper.parameters() if id(p) not in seen_params]
-	if reshaper_params:
-		param_groups.append({
-			'params': reshaper_params,
-			'lr': head_lr,
-			'name': 'reshaper',
-		})
-		seen_params.update(id(p) for p in reshaper_params)
-
-	# 3) Backbone blocks — layer-wise decay
-	#    Block i gets: backbone_lr * decay^(num_layers - 1 - i)
-	#    Block 0 (earliest) -> smallest LR, block N-1 (latest) -> backbone_lr
-	for i, block in enumerate(encoder.blocks):
-		block_params = [p for p in block.parameters() if id(p) not in seen_params]
-		if block_params:
-			layer_lr = backbone_lr * (layer_decay ** (num_layers - 1 - i))
-			param_groups.append({
-				'params': block_params,
-				'lr': layer_lr,
-				'name': f'backbone.block.{i}',
-			})
-			seen_params.update(id(p) for p in block_params)
-
-	# 4) Remaining backbone params (patch_embed, cls_token, norm) — lowest LR
-	remaining = [p for p in model.backbone.parameters()
-				 if id(p) not in seen_params and p.requires_grad]
-	if remaining:
-		lowest_lr = backbone_lr * (layer_decay ** num_layers)
-		param_groups.append({
-			'params': remaining,
-			'lr': lowest_lr,
-			'name': 'backbone.other',
-		})
-
-	return param_groups
-
-
 def get_data_paths(mode, data_percentage=1.0, selected_months=None):
 
 	if selected_months is None:
@@ -891,42 +818,6 @@ def get_data_paths(mode, data_percentage=1.0, selected_months=None):
 		raise ValueError(f"Unknown mode: {mode}. Expected 'training', 'validation', or 'testing'.")
 
 
-def get_location_codebook(data_paths):
-	"""Compute unique tile centroids from data paths for location quantization.
-
-	Args:
-		data_paths: list of (image_paths, gt_path, tile_name) as returned by get_data_paths()
-
-	Returns:
-		(K, 2) numpy array of [lat, lon] centroids, one per unique tile location.
-	"""
-	import geopandas as gpd
-
-	geo_path = path_config.get_data_geojson()
-	geo_gdf = gpd.read_file(geo_path)
-	geo_gdf = geo_gdf.rename(columns={"Site_ID": "SiteID"})
-	geo_gdf["HLStile"] = "T" + geo_gdf["name"]
-	geo_gdf = geo_gdf.set_crs("EPSG:4326")
-	geo_gdf["centroid"] = geo_gdf.geometry.representative_point()
-
-	seen = set()
-	centers = []
-	for _, _, full_id in data_paths:
-		hls_tile = full_id.split("_")[-1]
-		site_id = full_id.split("_")[-2]
-		key = (site_id, hls_tile)
-		if key in seen:
-			continue
-		seen.add(key)
-		row = geo_gdf[(geo_gdf["HLStile"] == hls_tile) & (geo_gdf["SiteID"] == site_id)]
-		if len(row) == 0:
-			continue
-		c = row["centroid"].iloc[0]
-		centers.append([c.y, c.x])
-
-	return np.array(centers, dtype=np.float32)
-
-
 def parse_param(filename, key, default=None, cast=str):
 	"""Parse a parameter value from a filename like 'prefix_key-value_suffix.pth'."""
 	search = f"_{key}-"
@@ -969,7 +860,7 @@ def build_model(group, params, n_timesteps):
 		p_loc_drop = parse_param(params, "plocdrop", default=0.0, cast=float)
 		use_ndvi = "nondvi" not in group
 		pretrained = "nopretrain" not in group
-		model = PrestoPhenologyModel(num_classes=4, freeze_encoder=freeze, input_mode="hls",
+		model = PrestoPhenologyModel(num_classes=4, freeze_encoder=freeze,
 		                             feed_timeloc=feed_timeloc, timeloc_mode=timeloc_mode,
 		                             dropout=dropout,
 		                             p_loc_drop=p_loc_drop,
