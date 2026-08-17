@@ -404,7 +404,7 @@ def batched_sliding_window(model, image, crop_size, device, tile_size=330,
 		crop_size:  spatial crop size the model expects
 		device:     torch device
 		tile_size:  valid spatial region (default 330)
-		stride:     sliding window stride (default: from EVAL_STRIDE config)
+		stride:     sliding window stride (default: evaluation.stride)
 		batch_size: crops per forward pass (default: auto-scaled from config)
 		temporal_coords:  (T, 2) tensor
 		location_coords:  (2,) tensor

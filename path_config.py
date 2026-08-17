@@ -1,166 +1,117 @@
-"""
-Path configuration module that reads directory paths from dirs.txt
-"""
+"""Load typed project settings from JSON configuration."""
+
+import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
-
-# Cache for parsed paths
-_PATHS_CACHE: Optional[Dict[str, str]] = None
+from typing import Any
 
 
-def _get_dirs_file_path() -> Path:
-    """Get the path to the dirs.txt file."""
-    current_dir = Path(__file__).parent
-    return current_dir / "dirs.txt"
+REPO_ROOT = Path(__file__).resolve().parent
+_CONFIG: dict[str, Any] | None = None
 
 
-def load_paths(force_reload: bool = False) -> Dict[str, str]:
-    """
-    Load directory paths from dirs.txt file.
+def get_config_path() -> Path:
+    """Return the configured JSON path or the repository-local default."""
+    configured = os.environ.get("PHENOLOGY_CONFIG")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return REPO_ROOT / "config.json"
 
-    Args:
-        force_reload: If True, reload from file even if cached
 
-    Returns:
-        Dictionary mapping path keys to their values
-    """
-    global _PATHS_CACHE
+def load_config(force_reload: bool = False) -> dict[str, Any]:
+    """Load and cache the project configuration."""
+    global _CONFIG
+    if _CONFIG is not None and not force_reload:
+        return _CONFIG
 
-    if _PATHS_CACHE is not None and not force_reload:
-        return _PATHS_CACHE
-
-    paths = {}
-    dirs_file = _get_dirs_file_path()
-
-    if not dirs_file.exists():
+    config_path = get_config_path()
+    if not config_path.exists():
         raise FileNotFoundError(
-            f"dirs.txt not found at {dirs_file}. "
-            "Please create this file with your directory configuration."
+            f"Configuration not found at {config_path}. Copy config.example.json "
+            "to config.json or set PHENOLOGY_CONFIG."
         )
 
-    with open(dirs_file, 'r') as f:
-        for line in f:
-            line = line.strip()
-            # Skip empty lines and comments
-            if not line or line.startswith('#'):
-                continue
+    with config_path.open(encoding="utf-8") as config_file:
+        config = json.load(config_file)
+    if not isinstance(config, dict):
+        raise ValueError(f"Configuration root must be a JSON object: {config_path}")
 
-            # Parse KEY=VALUE format
-            if '=' in line:
-                key, value = line.split('=', 1)
-                paths[key.strip()] = value.strip()
-
-    _PATHS_CACHE = paths
-    return paths
+    _CONFIG = config
+    return config
 
 
-def get_path(key: str, default: Optional[str] = None) -> str:
-    """
-    Get a directory path by its key.
+def get_value(key: str, default: Any = None) -> Any:
+    """Read a value using a dotted JSON key such as ``evaluation.stride``."""
+    value: Any = load_config()
+    for part in key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            if default is not None:
+                return default
+            raise KeyError(f"Missing configuration key: {key}")
+        value = value[part]
+    return value
 
-    Args:
-        key: The key for the path (e.g., 'DATA_HLS_COMPOSITES')
-        default: Default value if key not found (if None, raises KeyError)
 
-    Returns:
-        The path string
-
-    Raises:
-        KeyError: If key not found and no default provided
-    """
-    paths = load_paths()
-
-    if key not in paths:
-        if default is not None:
-            return default
-        raise KeyError(
-            f"Path key '{key}' not found in dirs.txt. "
-            f"Available keys: {list(paths.keys())}"
-        )
-
-    return paths[key]
+def get_path(key: str) -> str:
+    """Read a path setting and resolve relative paths from the repository root."""
+    path = Path(get_value(key)).expanduser()
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return str(path)
 
 
 def get_mean_stds_dir() -> str:
-    return get_path("MEAN_STDS_DIR")
+    return get_path("storage.mean_stds")
+
 
 def get_data_paths_dir() -> str:
-    return get_path("DATA_PATHS_DIR")
+    return get_path("storage.data_paths")
+
 
 def get_data_hls_composites() -> str:
-    """Get the HLS composites data directory."""
-    return get_path('DATA_HLS_COMPOSITES')
+    return get_path("data.hls_composites")
+
 
 def get_data_lsp_ancillary() -> str:
-    """Get the LSP ancillary data directory."""
-    return get_path('DATA_LSP_ANCILLARY')
+    return get_path("data.lsp_ancillary")
+
 
 def get_data_geojson() -> str:
-    """Get the geotiff extents geojson file path."""
-    return get_path('DATA_GEOJSON')
+    return get_path("data.geojson")
+
 
 def get_checkpoint_root() -> str:
-    """Get the checkpoint root directory."""
-    return get_path('CHECKPOINT_ROOT')
+    return get_path("storage.checkpoints")
+
 
 def get_pixels_cache_dir() -> str:
-    """Get the checkpoint root directory."""
-    return get_path('PIXELS_CACHE_DIR')
+    return get_path("storage.pixel_cache")
 
 
 def get_qual_cache_dir() -> str:
-    """Base directory for qualitative per-tile caches (append /m<months_slug>)."""
-    return get_path('QUAL_CACHE_DIR', default='data/qualitative_cache')
+    return get_path("storage.qualitative_cache")
 
 
 def get_qual_tile_ids() -> list[tuple[str, str]]:
-    """Parse QUAL_TILE_IDS as a list of (SiteID, HLStile) pairs."""
-    raw = get_path('QUAL_TILE_IDS', default='')
-    pairs = []
-    for entry in raw.split(','):
-        entry = entry.strip()
-        if not entry:
-            continue
-        if '=' not in entry:
-            raise ValueError(f"QUAL_TILE_IDS entry must be SiteID=HLStile, got '{entry}'")
-        sid, htile = entry.split('=', 1)
-        pairs.append((sid.strip(), htile.strip()))
-    return pairs
+    tiles = get_value("evaluation.qualitative_tiles", [])
+    return [(tile["site_id"], tile["hls_tile"]) for tile in tiles]
 
 
 def get_wandb_project() -> str:
-    """Get the base wandb project name."""
-    return get_path('WANDB_PROJECT', default='phenology_paper_2')
+    return str(get_value("wandb.project", "phenology_paper_2"))
 
 
 def get_eval_stride() -> int:
-    """Get the sliding-window stride for evaluation (in pixels)."""
-    return int(get_path('EVAL_STRIDE', default='2'))
+    return int(get_value("evaluation.stride", 2))
 
 
 def get_eval_batch_size() -> int:
-    """Get the base batch size for batched sliding-window eval (at crop_size=48)."""
-    return int(get_path('EVAL_BATCH_SIZE', default='64'))
+    return int(get_value("evaluation.batch_size", 64))
 
 
 def get_model_weights(model_size: str) -> str:
-    """
-    Get the model weights file path.
-
-    Args:
-        model_size: 'tiny', '100m', or '300m'
-
-    Returns:
-        Path to model weights file
-    """
-    key = f'MODEL_WEIGHTS_{model_size.upper()}'
-    return get_path(key)
+    return get_path(f"model_weights.{model_size.lower()}")
 
 
-if __name__ == '__main__':
-    # Test loading
-    paths = load_paths()
-    print("Loaded paths from dirs.txt:")
-    for key, value in paths.items():
-        print(f"  {key} = {value}")
+if __name__ == "__main__":
+    print(json.dumps(load_config(), indent=2))

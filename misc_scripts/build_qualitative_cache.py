@@ -1,8 +1,7 @@
 """Build the qualitative-tile cache consumed by Section 4.1 of
 results_overview_notebook.ipynb.
 
-Reads tile selection and cache location from dirs.txt
-(keys: QUAL_TILE_IDS, QUAL_CACHE_DIR). Runs
+Reads tile selection and cache location from config.json. Runs
 misc_scripts/visualize_tile_predictions.py in --cache_only mode.
 
 Usage (on a GPU node):
@@ -37,7 +36,7 @@ def main():
 
     tile_pairs = path_config.get_qual_tile_ids()
     if not tile_pairs:
-        sys.exit("QUAL_TILE_IDS is empty in dirs.txt — add SiteID=HLStile entries.")
+        sys.exit("evaluation.qualitative_tiles is empty in config.json.")
 
     months_slug = "-".join(str(m) for m in args.selected_months)
     cache_dir = os.path.join(path_config.get_qual_cache_dir(), f"m{months_slug}")

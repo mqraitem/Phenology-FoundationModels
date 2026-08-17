@@ -244,7 +244,7 @@ def main():
 		args.load_checkpoint = True
 	elif args.load_checkpoint:
 		if args.model_size == "300m" and not args.feed_timeloc:
-			weights_path = path_config.get_path("MODEL_WEIGHTS_300M_NONTL")
+			weights_path = path_config.get_path("model_weights.300m_nontl")
 		else:
 			weights_path = path_config.get_model_weights(args.model_size)
 	else:

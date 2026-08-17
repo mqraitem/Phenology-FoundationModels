@@ -23,6 +23,6 @@ def setup_records_dir(selected_months):
 
 
 def get_wandb_project(data_percentage, months_str):
-    """Get wandb project name from dirs.txt config."""
+    """Get the W&B project name from the JSON configuration."""
     base = path_config.get_wandb_project()
     return f"{base}_{data_percentage}_m{months_str}"

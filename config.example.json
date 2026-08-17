@@ -1,0 +1,33 @@
+{
+  "data": {
+    "hls_composites": "/path/to/HLS_composites",
+    "lsp_ancillary": "/path/to/LSP_ancillary",
+    "geojson": "/path/to/geotiff_extents.geojson"
+  },
+  "storage": {
+    "mean_stds": "data/mean_stds",
+    "data_paths": "data/data_paths",
+    "checkpoints": "data/checkpoints",
+    "pixel_cache": "data/pixels_cache",
+    "qualitative_cache": "data/qualitative_cache"
+  },
+  "model_weights": {
+    "300m": "data/prithvi_checkpoints/Prithvi_EO_V2_300M_TL.pt",
+    "300m_nontl": "data/prithvi_checkpoints/Prithvi_EO_V2_300M.pt",
+    "100m": "data/prithvi_checkpoints/Prithvi_EO_V2_100M_TL.pt",
+    "tiny": "data/prithvi_checkpoints/Prithvi_EO_V2_tiny_TL.pt"
+  },
+  "evaluation": {
+    "stride": 10,
+    "batch_size": 32,
+    "qualitative_tiles": [
+      {"site_id": "AZ-2", "hls_tile": "T12SVE"},
+      {"site_id": "MI-1", "hls_tile": "T15TYM"},
+      {"site_id": "AR-1", "hls_tile": "T15SYV"},
+      {"site_id": "AK-1", "hls_tile": "T06VWR"}
+    ]
+  },
+  "wandb": {
+    "project": "phenology_wallah"
+  }
+}

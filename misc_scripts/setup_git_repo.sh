@@ -21,7 +21,7 @@ git add \
     README.md \
     arg_configs.py \
     path_config.py \
-    dirs.txt \
+    config.example.json \
     eval_to_dataframe.py \
     select_best_params.py \
     train_presto.py \

@@ -39,31 +39,26 @@ The Presto code under `lib/models/presto/` is a vendored copy of [nasaharvest/pr
 
 Presto's own dependencies are still needed for `train_presto.py`; install them per the upstream Presto README, ideally in a dedicated conda environment.
 
-### Path configuration (`dirs.txt`)
-`path_config.py` reads `dirs.txt` to resolve all data and weight paths. Edit `dirs.txt` before training:
+### Configuration
 
+Create the machine-local configuration before training:
+
+```bash
+cp config.example.json config.json
 ```
-DATA_HLS_COMPOSITES=/path/to/HLS_composites
-DATA_LSP_ANCILLARY=/path/to/LSP_ancillary
-DATA_GEOJSON=/path/to/geotiff_extents.geojson
 
-MEAN_STDS_DIR=data/mean_stds
-DATA_PATHS_DIR=data/data_paths
-CHECKPOINT_ROOT=data/checkpoints
-PIXELS_CACHE_DIR=data/pixels_cache
-QUAL_CACHE_DIR=data/qualitative_cache
+Edit the external data paths in `config.json`. Repository-relative storage and
+weight paths are resolved from the repository root. `config.json` is ignored by
+Git; `config.example.json` documents the published configuration structure.
 
-QUAL_TILE_IDS=AZ-2=T12SVE,MI-1=T15TYM,AR-1=T15SYV,AK-1=T06VWR
+To keep the configuration elsewhere, set:
 
-MODEL_WEIGHTS_300M=data/prithvi_checkpoints/Prithvi_EO_V2_300M_TL.pt
-MODEL_WEIGHTS_300M_NONTL=data/prithvi_checkpoints/Prithvi_EO_V2_300M.pt
-MODEL_WEIGHTS_100M=data/prithvi_checkpoints/Prithvi_EO_V2_100M_TL.pt
-MODEL_WEIGHTS_TINY=data/prithvi_checkpoints/Prithvi_EO_V2_tiny_TL.pt
-
-EVAL_STRIDE=10
-EVAL_BATCH_SIZE=32
-WANDB_PROJECT=phenology_wallah
+```bash
+export PHENOLOGY_CONFIG=/path/to/config.json
 ```
+
+Code reads nested settings using dotted JSON keys, for example
+`get_path("data.hls_composites")` and `get_value("evaluation.stride")`.
 
 ### Eco-region shapefile (optional, notebook only)
 The notebook's regional analysis reads `useco1/NA_CEC_Eco_Level1.shp`. Download from EPA / CEC and place at `useco1/`.

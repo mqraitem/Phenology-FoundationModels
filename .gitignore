@@ -4,6 +4,7 @@ records/
 results/
 wandb/
 useco1/
+config.json
 
 # Python
 __pycache__/
