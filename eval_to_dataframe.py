@@ -9,8 +9,8 @@ import pandas as pd
 import path_config
 
 from lib.utils import get_masks_paper, eval_data_loader_df, eval_data_loader_crops_df, eval_data_loader_presto_df, get_data_paths, str2bool, months_to_str, get_months_subdir, get_results_dir, build_model
-from lib.dataloaders.tile_dataset import TileDataset
-from lib.dataloaders.georeferenced_tile_dataset import GeoreferencedTileDataset
+from lib.dataloaders.centroid_tile_dataset import CentroidTileDataset
+from lib.dataloaders.pixel_coordinate_tile_dataset import PixelCoordinateTileDataset
 
 #######################################################################################
 
@@ -104,7 +104,7 @@ def main():
 
 			if is_presto:
 				data_path = get_data_paths(data_split, data_percentage, selected_months)
-				cycle_dataset = GeoreferencedTileDataset(data_path, split=data_split, data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
+				cycle_dataset = PixelCoordinateTileDataset(data_path, split=data_split, data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
 				data_loader = DataLoader(cycle_dataset, batch_size=1, shuffle=False, num_workers=2)
 
 				model = model.to(device)
@@ -113,7 +113,7 @@ def main():
 				out_df = eval_data_loader_presto_df(data_loader, model, device, get_masks_paper(data_loader_name), month=month_tensor)
 			else:
 				data_path = get_data_paths(data_split, data_percentage, selected_months)
-				cycle_dataset = TileDataset(data_path, split=data_split, data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix)
+				cycle_dataset = CentroidTileDataset(data_path, split=data_split, data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix)
 
 				data_loader = DataLoader(cycle_dataset, batch_size=2, shuffle=False, num_workers=2)
 

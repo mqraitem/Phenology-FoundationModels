@@ -40,7 +40,7 @@ def load_raster_output(path):
 
 # ===== Dataset =====
 
-class PixelDataset(Dataset):
+class CentroidPixelDataset(Dataset):
 	def __init__(self, data_dir, split, cache_path=None, data_percentage=1.0, target_size=330, regenerate=False, n_timesteps=12, file_suffix="", skip_normalization=False):
 		"""
 		Args:
@@ -76,16 +76,16 @@ class PixelDataset(Dataset):
 		self._assign_locations()
 
 		if os.path.exists(self.cache_path) and not regenerate:
-			print(f"[PixelDataset] Loading preprocessed dataset from {self.cache_path}")
+			print(f"[CentroidPixelDataset] Loading preprocessed dataset from {self.cache_path}")
 			data = np.load(self.cache_path, allow_pickle=True)
 			self.inputs = data['inputs']   # (N, T, C)
 			self.targets = data['targets'] # (N, 4)
 			self.latlons = data['latlons'] # (N, 2)
 			self.meta = data['meta']
 		else:
-			print(f"[PixelDataset] Preprocessing {split} split into pixels...")
+			print(f"[CentroidPixelDataset] Preprocessing {split} split into pixels...")
 			self._build_dataset()
-			print(f"[PixelDataset] Saved to {self.cache_path}")
+			print(f"[CentroidPixelDataset] Saved to {self.cache_path}")
 
 
 	def _get_cache_path(self):

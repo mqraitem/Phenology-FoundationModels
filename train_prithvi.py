@@ -29,7 +29,7 @@ from lib.utils import (
 	get_data_paths, print_trainable_parameters,
 )
 from lib.dataloaders.crop_dataset import CropDataset
-from lib.dataloaders.tile_dataset import TileDataset
+from lib.dataloaders.centroid_tile_dataset import CentroidTileDataset
 from arg_configs import get_core_parser, set_seed
 
 #######################################################################################
@@ -220,10 +220,10 @@ def main():
 	)
 
 	# Standard tile datasets for val/test (sliding window eval)
-	cycle_dataset_val = TileDataset(path_val, split="validation", data_percentage=args.data_percentage,
+	cycle_dataset_val = CentroidTileDataset(path_val, split="validation", data_percentage=args.data_percentage,
 	                                  means=cfg_means, stds=cfg_stds,
 	                                  n_timesteps=n_timesteps, file_suffix=file_suffix)
-	cycle_dataset_test = TileDataset(path_test, split="testing", data_percentage=args.data_percentage,
+	cycle_dataset_test = CentroidTileDataset(path_test, split="testing", data_percentage=args.data_percentage,
 	                                   means=cfg_means, stds=cfg_stds,
 	                                   n_timesteps=n_timesteps, file_suffix=file_suffix)
 

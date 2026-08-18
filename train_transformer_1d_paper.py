@@ -34,8 +34,8 @@ from lib.utils import (
 	eval_data_loader, get_masks_paper, print_trainable_parameters,
 	save_checkpoint, str2bool, months_to_str, get_checkpoint_dir, get_data_paths,
 )
-from lib.dataloaders.pixel_dataset import PixelDataset
-from lib.dataloaders.tile_dataset import TileDataset
+from lib.dataloaders.centroid_pixel_dataset import CentroidPixelDataset
+from lib.dataloaders.centroid_tile_dataset import CentroidTileDataset
 from arg_configs import get_core_parser, set_seed
 
 #######################################################################################
@@ -94,18 +94,18 @@ def main():
 	path_test = get_data_paths("testing", args.data_percentage, args.selected_months)
 
 	# Training: pixel-level (all pixels)
-	cycle_dataset_train = PixelDataset(
+	cycle_dataset_train = CentroidPixelDataset(
 		path_train, split="training",
 		data_percentage=args.data_percentage, n_timesteps=n_timesteps,
 		file_suffix=file_suffix,
 	)
 	# Eval: full tiles (no subsampling)
-	cycle_dataset_val = TileDataset(
+	cycle_dataset_val = CentroidTileDataset(
 		path_val, split="validation",
 		data_percentage=args.data_percentage, n_timesteps=n_timesteps,
 		file_suffix=file_suffix,
 	)
-	cycle_dataset_test = TileDataset(
+	cycle_dataset_test = CentroidTileDataset(
 		path_test, split="testing",
 		data_percentage=args.data_percentage, n_timesteps=n_timesteps,
 		file_suffix=file_suffix,

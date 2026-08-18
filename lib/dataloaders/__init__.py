@@ -1,13 +1,13 @@
 from .crop_dataset import CropDataset
-from .georeferenced_pixel_dataset import GeoreferencedPixelDataset
-from .georeferenced_tile_dataset import GeoreferencedTileDataset
-from .pixel_dataset import PixelDataset
-from .tile_dataset import TileDataset
+from .pixel_coordinate_dataset import PixelCoordinateDataset
+from .pixel_coordinate_tile_dataset import PixelCoordinateTileDataset
+from .centroid_pixel_dataset import CentroidPixelDataset
+from .centroid_tile_dataset import CentroidTileDataset
 
 __all__ = [
     "CropDataset",
-    "GeoreferencedPixelDataset",
-    "GeoreferencedTileDataset",
-    "PixelDataset",
-    "TileDataset",
+    "PixelCoordinateDataset",
+    "PixelCoordinateTileDataset",
+    "CentroidPixelDataset",
+    "CentroidTileDataset",
 ]

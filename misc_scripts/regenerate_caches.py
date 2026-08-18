@@ -12,9 +12,9 @@ os.environ["OMP_NUM_THREADS"] = "4"
 os.environ["MKL_NUM_THREADS"] = "4"
 
 from lib.utils import get_data_paths, months_to_str
-from lib.dataloaders.pixel_dataset import PixelDataset
+from lib.dataloaders.centroid_pixel_dataset import CentroidPixelDataset
 from lib.dataloaders.crop_dataset import CropDataset
-from lib.dataloaders.georeferenced_pixel_dataset import GeoreferencedPixelDataset
+from lib.dataloaders.pixel_coordinate_dataset import PixelCoordinateDataset
 
 MONTH_SUBSETS = [
     [3, 6, 9, 12],
@@ -41,7 +41,7 @@ for selected_months in MONTH_SUBSETS:
     # 2. HLS mean/stds + pixel cache (training split)
     print("\n--- HLS pixel cache (triggers mean/std computation) ---")
     path_train_hls = get_data_paths("training", DATA_PERCENTAGE, selected_months)
-    pixel_ds = PixelDataset(
+    pixel_ds = CentroidPixelDataset(
         path_train_hls, split="training",
         data_percentage=DATA_PERCENTAGE,
         n_timesteps=n_timesteps,
@@ -65,14 +65,14 @@ for selected_months in MONTH_SUBSETS:
 
     # 4. HLS pixel cache with per-pixel lat/lon (for Presto)
     print("\n--- HLS pixel cache with per-pixel lat/lon ---")
-    pixel_ds_ll = GeoreferencedPixelDataset(
+    pixel_ds_ll = PixelCoordinateDataset(
         path_train_hls, split="training",
         data_percentage=DATA_PERCENTAGE,
         n_timesteps=n_timesteps,
         file_suffix=file_suffix,
         skip_normalization=True,
     )
-    print(f"  Georeferenced HLS pixels: {len(pixel_ds_ll)} samples")
+    print(f"  Pixel-coordinate HLS samples: {len(pixel_ds_ll)}")
     del pixel_ds_ll
 
 print(f"\n{'='*60}")

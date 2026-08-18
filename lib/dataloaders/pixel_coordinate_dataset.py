@@ -1,7 +1,7 @@
 """
 Pixel dataloader with per-pixel lat/lon from rasterio transforms.
 
-Same as pixel_dataset.py except each pixel gets its actual geographic
+Same as centroid_pixel_dataset.py except each pixel gets its actual geographic
 coordinate instead of the tile centroid.
 """
 
@@ -66,11 +66,11 @@ def compute_pixel_latlons_from_raster(raster_path, H=330, W=330):
     return latlons.astype(np.float32)
 
 
-class GeoreferencedPixelDataset(Dataset):
+class PixelCoordinateDataset(Dataset):
     def __init__(self, data_dir, split, cache_path=None, data_percentage=1.0, target_size=330,
                  regenerate=False, n_timesteps=12, file_suffix="", skip_normalization=False):
         """
-        Same as PixelDataset but with per-pixel lat/lon from rasterio.
+        Same as CentroidPixelDataset but with per-pixel lat/lon from rasterio.
         Uses a separate cache file (suffix _v2) to avoid conflicts.
         """
         self.data_dir = data_dir
@@ -91,16 +91,16 @@ class GeoreferencedPixelDataset(Dataset):
             self._stds_tensor = torch.tensor(self.stds, dtype=torch.float32).view(1, -1)
 
         if os.path.exists(self.cache_path) and not regenerate:
-            print(f"[GeoreferencedPixelDataset] Loading preprocessed dataset from {self.cache_path}")
+            print(f"[PixelCoordinateDataset] Loading preprocessed dataset from {self.cache_path}")
             data = np.load(self.cache_path, allow_pickle=True)
             self.inputs = data['inputs']
             self.targets = data['targets']
             self.latlons = data['latlons']
             self.meta = data['meta']
         else:
-            print(f"[GeoreferencedPixelDataset] Preprocessing {split} split into pixels...")
+            print(f"[PixelCoordinateDataset] Preprocessing {split} split into pixels...")
             self._build_dataset()
-            print(f"[GeoreferencedPixelDataset] Saved to {self.cache_path}")
+            print(f"[PixelCoordinateDataset] Saved to {self.cache_path}")
 
     def _get_cache_path(self):
         if self.file_suffix.startswith("_m"):

@@ -32,8 +32,8 @@ from lib.utils import (
     print_trainable_parameters, save_checkpoint, str2bool,
     months_to_str, get_checkpoint_dir, get_data_paths,
 )
-from lib.dataloaders.georeferenced_pixel_dataset import GeoreferencedPixelDataset
-from lib.dataloaders.georeferenced_tile_dataset import GeoreferencedTileDataset
+from lib.dataloaders.pixel_coordinate_dataset import PixelCoordinateDataset
+from lib.dataloaders.pixel_coordinate_tile_dataset import PixelCoordinateTileDataset
 from arg_configs import get_core_parser, set_seed
 
 #######################################################################################
@@ -134,12 +134,12 @@ def main():
     path_val = get_data_paths("validation", args.data_percentage, args.selected_months)
     path_test = get_data_paths("testing", args.data_percentage, args.selected_months)
 
-    cycle_dataset_val = GeoreferencedTileDataset(path_val, split="validation", data_percentage=args.data_percentage,
+    cycle_dataset_val = PixelCoordinateTileDataset(path_val, split="validation", data_percentage=args.data_percentage,
                                        n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
-    cycle_dataset_test = GeoreferencedTileDataset(path_test, split="testing", data_percentage=args.data_percentage,
+    cycle_dataset_test = PixelCoordinateTileDataset(path_test, split="testing", data_percentage=args.data_percentage,
                                         n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
 
-    cycle_dataset_train = GeoreferencedPixelDataset(
+    cycle_dataset_train = PixelCoordinateDataset(
         path_train, split="training",
         data_percentage=args.data_percentage, n_timesteps=n_timesteps,
         file_suffix=file_suffix, skip_normalization=True,

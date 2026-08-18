@@ -26,8 +26,8 @@ import torch
 from torch.utils.data import DataLoader
 
 import path_config
-from lib.dataloaders.tile_dataset import TileDataset
-from lib.dataloaders.georeferenced_tile_dataset import GeoreferencedTileDataset
+from lib.dataloaders.centroid_tile_dataset import CentroidTileDataset
+from lib.dataloaders.pixel_coordinate_tile_dataset import PixelCoordinateTileDataset
 from lib.utils import (
     batched_sliding_window,
     build_model,
@@ -206,14 +206,14 @@ def main() -> None:
     selected_paths = _select_test_paths(all_test_paths, args.tile_ids)
 
     file_suffix = f"_{months_sub}"
-    hls_dataset = TileDataset(
+    hls_dataset = CentroidTileDataset(
         selected_paths,
         split="testing",
         data_percentage=1.0,
         n_timesteps=len(args.selected_months),
         file_suffix=file_suffix,
     )
-    presto_dataset = GeoreferencedTileDataset(
+    presto_dataset = PixelCoordinateTileDataset(
         selected_paths,
         split="testing",
         data_percentage=1.0,

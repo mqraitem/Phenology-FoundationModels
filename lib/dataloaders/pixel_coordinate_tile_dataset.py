@@ -1,7 +1,7 @@
 """
 Tile dataloader with per-pixel lat/lon from rasterio transforms.
 
-Same as tile_dataset.py except latlons is (H, W, 2) per-pixel instead of (2,) tile centroid.
+Same as centroid_tile_dataset.py except latlons is (H, W, 2) per-pixel instead of (2,) tile centroid.
 """
 
 import rasterio
@@ -68,8 +68,8 @@ def compute_pixel_latlons_from_raster(raster_path, H=330, W=330):
     return latlons.astype(np.float32)
 
 
-class GeoreferencedTileDataset(Dataset):
-    """Same as TileDataset but returns per-pixel latlons (H, W, 2)."""
+class PixelCoordinateTileDataset(Dataset):
+    """Same as CentroidTileDataset but returns per-pixel latlons (H, W, 2)."""
 
     def __init__(self, path, split, data_percentage=1.0, means=None, stds=None,
                  n_timesteps=12, file_suffix="", skip_normalization=False):
