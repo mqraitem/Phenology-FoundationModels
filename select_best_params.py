@@ -12,7 +12,6 @@ recompute from scratch (e.g. after adding new seeds or new checkpoints).
 import torch
 from torch.utils.data import DataLoader
 import numpy as np
-import yaml
 import os
 import re
 import argparse
@@ -36,31 +35,19 @@ def strip_seed_from_filename(filename):
 
 
 def eval_checkpoint(model, device, is_presto, crop_size,
-                    val_dataloader, cycle_dataset_val, orig_means, orig_stds,
-                    params, month_tensor=None):
+					val_dataloader, month_tensor=None):
 	"""Evaluate a single checkpoint and return mean val MAE."""
 	if is_presto:
 		acc, _, _ = eval_data_loader_presto(val_dataloader, model, device,
-		            get_masks_paper("train"), month=month_tensor, pixel_weighted=False)
+					get_masks_paper("train"), month=month_tensor, pixel_weighted=False)
 	else:
-		use_config_norm = "_confignorm-True" in params
-		if use_config_norm:
-			with open('lib/models/prithvi_configs/prithvi_300m.yaml', 'r') as f:
-				norm_cfg = yaml.safe_load(f)
-			cycle_dataset_val.means = np.array(norm_cfg["pretrained_cfg"]["mean"])
-			cycle_dataset_val.stds  = np.array(norm_cfg["pretrained_cfg"]["std"])
-
 		if crop_size is not None:
 			acc, _, _ = eval_data_loader_crops(val_dataloader, model, device,
-			            get_masks_paper("train"), crop_size=crop_size, stride=crop_size,
+						get_masks_paper("train"), crop_size=crop_size, stride=crop_size,
 			            pixel_weighted=False)
 		else:
 			acc, _, _ = eval_data_loader(val_dataloader, model, device,
-			            get_masks_paper("train"), pixel_weighted=False)
-
-		if use_config_norm:
-			cycle_dataset_val.means = orig_means
-			cycle_dataset_val.stds  = orig_stds
+						get_masks_paper("train"), pixel_weighted=False)
 
 	return np.mean(list(acc.values()))
 
@@ -134,10 +121,6 @@ def main():
 			month_tensor = torch.tensor(selected_months_0idx, dtype=torch.long)
 
 		# Build dataloader once (shared across all seeds)
-		cycle_dataset_val = None
-		orig_means = None
-		orig_stds = None
-
 		if is_presto:
 			path_val = get_data_paths("validation", data_percentage, selected_months)
 			cycle_dataset_val = PixelCoordinateTileDataset(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix, skip_normalization=True)
@@ -145,8 +128,6 @@ def main():
 		else:
 			path_val = get_data_paths("validation", data_percentage, selected_months)
 			cycle_dataset_val = CentroidTileDataset(path_val, split="validation", data_percentage=data_percentage, n_timesteps=n_timesteps, file_suffix=file_suffix)
-			orig_means = cycle_dataset_val.means.copy()
-			orig_stds  = cycle_dataset_val.stds.copy()
 			val_dataloader = DataLoader(cycle_dataset_val, batch_size=batch_size, shuffle=False, num_workers=2)
 
 		# Collect val MAE for every (hyperparameter, seed) pair
@@ -178,8 +159,7 @@ def main():
 				model.load_state_dict(torch.load(checkpoint)["model_state_dict"])
 
 				mae = eval_checkpoint(model, device, is_presto, crop_size,
-				                      val_dataloader, cycle_dataset_val, orig_means, orig_stds,
-				                      params, month_tensor)
+								  val_dataloader, month_tensor)
 
 				print(f"  [{ckpt_counter}/{total_ckpts}] {hp_key} | {seed_dir} | val MAE = {mae:.2f}")
 
