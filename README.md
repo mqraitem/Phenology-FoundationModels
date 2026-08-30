@@ -1,6 +1,6 @@
-# Crop Phenology Prediction with Foundation Models
+# Land Surface Phenology Prediction with Foundation Models
 
-Predicting crop phenology dates (day-of-year) from multi-temporal satellite imagery, comparing three architectures: a [Prithvi EO V2](https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M) ViT backbone with a Conv3D temporal-fusion head, the [Presto](https://github.com/nasaharvest/presto) pretrained pixel-level transformer, and a lightweight 1D temporal transformer baseline.
+Predicting land surface phenology (LSP) dates (day-of-year) from multi-temporal satellite imagery, comparing three architectures: a [Prithvi EO V2](https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-2.0-300M) ViT backbone with a Conv3D temporal-fusion head, the [Presto](https://github.com/nasaharvest/presto) pretrained pixel-level transformer, and a lightweight 1D temporal transformer baseline.
 
 ## Task
 

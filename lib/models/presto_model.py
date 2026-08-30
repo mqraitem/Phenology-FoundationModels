@@ -1,5 +1,5 @@
 """
-Presto Phenology model for crop phenology prediction.
+Presto Phenology model for land surface phenology (LSP) prediction.
 
 Key features:
   - Pretrained Presto encoder with band-group tokenization
