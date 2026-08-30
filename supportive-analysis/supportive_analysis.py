@@ -41,10 +41,10 @@ from shapely.geometry import box
 
 from lib.stratified_analysis import summarize_seed_balanced
 
-CACHE_DIR = Path("data/stratified_analysis/m3-6-9-12")
-SMOOTH_DIR = Path("data/stratified_analysis/smoothness_metric_comparison")
-TILE_DIR = Path("student_test_tiles_m3-6-9-12/data/m3-6-9-12/test")
-IMAGE_DIR = Path("paper_latex/Images")
+CACHE_DIR = REPO_ROOT / "data/stratified_analysis/m3-6-9-12"
+SMOOTH_DIR = REPO_ROOT / "data/stratified_analysis/smoothness_metric_comparison"
+TILE_DIR = REPO_ROOT / "student_test_tiles_m3-6-9-12/data/m3-6-9-12/test"
+IMAGE_DIR = REPO_ROOT / "paper_latex/Images"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 MODEL_ORDER = ["temporal_transformer", "presto", "prithvi"]
@@ -78,9 +78,9 @@ manifest
 
 # ## Analysis 1: Mean Error by CEC Level I Ecoregion
 # 
-# For each model, seed, tile-year, and ecoregion, absolute error is pooled over valid pixels and all four phenophases. Region values are then averaged equally across tile-years and seeds. Water is excluded. The maps use one shared scale, so the same color means the same MAE in every panel.
+# For each model, seed, tile-year, and ecoregion, absolute error is pooled over valid pixels and all four phenophases. Region values are then averaged equally across tile-years and seeds. Water is excluded. The map uses categorical region colors; exact model MAEs and support counts are reported in the adjacent key.
 # 
-# The test set covers eight terrestrial Level I regions, but geographic support is uneven. The table reports independent-site and tile-year counts; estimates based on one site should be treated as descriptive rather than broadly representative.
+# The test set covers eight terrestrial Level I regions, but geographic support is uneven. We report only regions represented by at least two independent sites; the table gives independent-site and tile-year counts.
 
 # %%
 
@@ -96,6 +96,8 @@ support = (
     eco_raw.groupby(["eco_region_l1_id", "eco_region_name"], as_index=False)
     .agg(n_sites=("site_id", "nunique"), n_tile_years=("tile_id", "nunique"))
 )
+supported_regions = support.loc[support["n_sites"] >= 2, "eco_region_l1_id"]
+eco_summary = eco_summary[eco_summary["eco_region_l1_id"].isin(supported_regions)].copy()
 eco_summary = eco_summary.drop(columns="n_tile_years").merge(
     support, on=["eco_region_l1_id", "eco_region_name"], how="left"
 )
@@ -112,14 +114,34 @@ display(
 
 regions = gpd.read_file(CACHE_DIR / "ecoregion_l1_us.geojson")
 states = gpd.read_file(CACHE_DIR / "us_states.geojson")
-all_values = eco_summary["mean"].to_numpy()
-vmin, vmax = float(np.nanmin(all_values)), float(np.nanmax(all_values))
-cmap = mpl.colormaps["viridis"]
 
 represented_names = sorted(eco_summary["eco_region_name"].unique())
 region_numbers = {name: i + 1 for i, name in enumerate(represented_names)}
+region_palette = mpl.colormaps["tab10"]
+region_colors = {
+    name: mpl.colors.to_hex(region_palette(i / max(len(represented_names) - 1, 1)))
+    for i, name in enumerate(represented_names)
+}
 conus_box = box(-125.5, 24.0, -66.0, 50.5)
-alaska_box = box(-170, 51, -130, 72)
+
+region_support = (
+    support[support["eco_region_l1_id"].isin(supported_regions)]
+    .set_index(["eco_region_l1_id", "eco_region_name"])
+    .sort_index()
+)
+region_mae = eco_summary.pivot(
+    index=["eco_region_l1_id", "eco_region_name"],
+    columns="model", values="mean",
+)
+region_table = region_support.join(region_mae).reset_index()
+region_table["number"] = region_table["eco_region_name"].map(region_numbers)
+region_table = region_table.sort_values("number").reset_index(drop=True)
+
+map_regions = regions.merge(
+    region_table[["eco_region_l1_id", "eco_region_name", "number"]],
+    left_on="id", right_on="eco_region_l1_id", how="left",
+)
+map_regions["map_color"] = map_regions["eco_region_name"].map(region_colors)
 
 def representative_point_in(geometry, clip_box):
     valid_geometry = make_valid(geometry)
@@ -133,86 +155,73 @@ def representative_point_in(geometry, clip_box):
     return max(polygon_parts, key=lambda part: part.area).representative_point()
 
 def add_region_numbers(ax, panel, clip_box):
-    for _, row in panel[panel["mean"].notna()].iterrows():
+    for _, row in panel[panel["number"].notna()].iterrows():
         point = representative_point_in(row.geometry, clip_box)
         if point is None:
             continue
         ax.text(
-            point.x, point.y, str(region_numbers[row["eco_region_name"]]),
+            point.x, point.y, str(int(row["number"])),
             ha="center", va="center", fontsize=12, fontweight="bold", zorder=10,
-            bbox={"boxstyle": "square,pad=0.24", "facecolor": "white",
-                  "edgecolor": "#222222", "linewidth": 0.9, "alpha": 0.94},
+            bbox={"boxstyle": "square,pad=0.22", "facecolor": "white",
+                  "edgecolor": "#222222", "linewidth": 0.8, "alpha": 0.94},
         )
 
-fig = plt.figure(figsize=(19.5, 8.8))
-grid = fig.add_gridspec(2, 3, height_ratios=[4.2, 1.65], hspace=0.01, wspace=0.035)
-axes = [fig.add_subplot(grid[0, i]) for i in range(3)]
-alaska_axes = [fig.add_subplot(grid[1, i]) for i in range(3)]
-alaska_states = states[states["name"] == "Alaska"].to_crs("EPSG:3338")
-ak_minx, ak_miny, ak_maxx, ak_maxy = alaska_states.total_bounds
-ak_pad_x = 0.025 * (ak_maxx - ak_minx)
-ak_pad_y = 0.025 * (ak_maxy - ak_miny)
-ak_box_aspect = (ak_maxy - ak_miny + 2 * ak_pad_y) / (ak_maxx - ak_minx + 2 * ak_pad_x)
+fig, (map_ax, key_ax) = plt.subplots(
+    1, 2, figsize=(16.0, 5.8), gridspec_kw={"width_ratios": [1.35, 1.0]}
+)
 
-for ax, alaska_ax, model in zip(axes, alaska_axes, MODEL_ORDER):
-    panel = regions.merge(
-        eco_summary[eco_summary["model"] == model],
-        left_on="id", right_on="eco_region_l1_id", how="left",
-    )
-    states.plot(ax=ax, facecolor="#f1f1f1", edgecolor="white", linewidth=0.5)
-    panel.plot(
-        ax=ax, column="mean", cmap=cmap, vmin=vmin, vmax=vmax,
-        edgecolor="#555555", linewidth=0.45,
-        missing_kwds={"color": "#dedede", "edgecolor": "#aaaaaa"},
-    )
-    ax.set_xlim(-125.5, -66.0)
-    ax.set_ylim(24.0, 50.5)
-    ax.set_aspect("auto")
-    ax.set_axis_off()
-    ax.set_title(MODEL_LABELS[model], fontsize=20, fontweight="bold", pad=10)
-    add_region_numbers(ax, panel, conus_box)
+states.plot(ax=map_ax, facecolor="#f4f4f4", edgecolor="white", linewidth=0.55)
+map_regions.plot(
+    ax=map_ax,
+    color=[region_colors.get(name, "#dedede")
+           for name in map_regions["eco_region_name"]],
+    edgecolor="#555555", linewidth=0.55,
+)
+map_ax.set_xlim(-125.5, -66.0)
+map_ax.set_ylim(24.0, 50.5)
+map_ax.set_aspect(1 / np.cos(np.deg2rad(37.25)))
+map_ax.set_axis_off()
+add_region_numbers(map_ax, map_regions, conus_box)
 
-    alaska_panel = panel.copy()
-    alaska_panel["geometry"] = alaska_panel.geometry.map(
-        lambda geometry: make_valid(geometry).intersection(alaska_box)
-    )
-    alaska_panel = alaska_panel[~alaska_panel.geometry.is_empty].to_crs("EPSG:3338")
-    alaska_states.plot(ax=alaska_ax, facecolor="#f1f1f1", edgecolor="white", linewidth=0.35)
-    alaska_panel.plot(
-        ax=alaska_ax, column="mean", cmap=cmap, vmin=vmin, vmax=vmax,
-        edgecolor="#555555", linewidth=0.35,
-        missing_kwds={"color": "#dedede", "edgecolor": "#aaaaaa"},
-    )
-    alaska_ax.set_xlim(ak_minx - ak_pad_x, ak_maxx + ak_pad_x)
-    alaska_ax.set_ylim(ak_miny - ak_pad_y, ak_maxy + ak_pad_y)
-    alaska_ax.set_box_aspect(ak_box_aspect)
-    alaska_ax.set_anchor("W")
-    alaska_ax.set_xticks([]); alaska_ax.set_yticks([])
-    alaska_ax.set_title("Alaska", fontsize=14, loc="left", pad=3)
-    for spine in alaska_ax.spines.values():
-        spine.set_edgecolor("#aaaaaa")
-        spine.set_linewidth(0.6)
-    add_region_numbers(alaska_ax, alaska_panel, None)
+key_ax.set_xlim(0, 1)
+key_ax.set_ylim(0, 1)
+key_ax.axis("off")
+key_ax.text(0.01, 0.96, "CEC Level I ecoregion", fontsize=13.5,
+            fontweight="bold", va="top")
+key_ax.text(0.57, 0.96, "Sites /\ntile-years", fontsize=11.5,
+            fontweight="bold", ha="center", va="top")
+model_columns = [0.72, 0.855, 0.98]
+for model, x_pos in zip(MODEL_ORDER, model_columns):
+    label = {"temporal_transformer": "TT", "presto": "Presto",
+             "prithvi": "Prithvi"}[model]
+    key_ax.text(x_pos, 0.96, label, fontsize=10.5, fontweight="bold",
+                ha="center", va="top")
+key_ax.plot([0.01, 0.995], [0.82, 0.82], color="#777777", linewidth=0.8)
 
-sm = mpl.cm.ScalarMappable(norm=mpl.colors.Normalize(vmin=vmin, vmax=vmax), cmap=cmap)
-cbar_ax = fig.add_axes([0.31, 0.205, 0.47, 0.023])
-cbar = fig.colorbar(sm, cax=cbar_ax, orientation="horizontal")
-cbar.set_label("Mean absolute error (days)", fontsize=14, labelpad=4)
-cbar.ax.tick_params(labelsize=13)
-
-key_positions = [(0.03, 0.095), (0.28, 0.095), (0.53, 0.095), (0.78, 0.095),
-                 (0.03, 0.050), (0.28, 0.050), (0.53, 0.050), (0.78, 0.050)]
-for name, (x_pos, y_pos) in zip(represented_names, key_positions):
-    number = region_numbers[name]
-    fig.text(
-        x_pos, y_pos, f"{number}", ha="left", va="center", fontsize=14, fontweight="bold",
-        bbox={"boxstyle": "square,pad=0.21", "facecolor": "white",
-              "edgecolor": "#222222", "linewidth": 0.9},
+for (_, row), y_pos in zip(region_table.iterrows(), np.linspace(0.73, 0.10, len(region_table))):
+    name = row["eco_region_name"]
+    number = int(row["number"])
+    key_ax.text(
+        0.03, y_pos, str(number), ha="center", va="center",
+        fontsize=12.5, fontweight="bold",
+        bbox={"boxstyle": "square,pad=0.27", "facecolor": region_colors[name],
+              "edgecolor": "#333333", "linewidth": 0.7},
     )
-    fig.text(x_pos + 0.028, y_pos, name.title(), ha="left", va="center", fontsize=14)
+    key_ax.text(0.08, y_pos, textwrap.fill(name.title(), 20),
+                fontsize=12.5, ha="left", va="center")
+    key_ax.text(0.57, y_pos, f"{int(row['n_sites'])} / {int(row['n_tile_years'])}",
+                fontsize=12.5, ha="center", va="center")
+    best_mae = min(row[model] for model in MODEL_ORDER)
+    for model, x_pos in zip(MODEL_ORDER, model_columns):
+        key_ax.text(
+            x_pos, y_pos, f"{row[model]:.1f}", fontsize=12.5,
+            fontweight="bold" if np.isclose(row[model], best_mae) else "normal",
+            ha="center", va="center",
+        )
 
-fig.suptitle("Mean Error by CEC Level I Ecoregion", fontsize=25, y=0.985)
-fig.subplots_adjust(left=0.01, right=0.99, top=0.90, bottom=0.29)
+key_ax.text(0.99, 0.02, "MAE (days); best in bold", fontsize=11.5,
+            fontweight="bold", ha="right", va="bottom")
+fig.subplots_adjust(left=0.015, right=0.995, top=0.99, bottom=0.02, wspace=0.025)
 eco_path = IMAGE_DIR / "ecoregion_mae_maps.pdf"
 fig.savefig(eco_path, bbox_inches="tight", dpi=300)
 plt.show()
@@ -297,14 +306,13 @@ ax.set_xticklabels(labels, fontsize=12, linespacing=1.15)
 ax.tick_params(axis="x", pad=8)
 ax.tick_params(axis="y", labelsize=12)
 ax.set_ylabel("Mean absolute error (days)", fontsize=15)
-ax.set_title("Mean Error by NLCD Land-Cover Class", fontsize=21, pad=14)
 ax.set_ylim(y_min, y_max)
 ax.set_yticks(np.arange(y_min, y_max + 0.1, 2.0))
 ax.grid(axis="y", color="#dddddd", linewidth=0.7)
 ax.set_axisbelow(True)
 ax.spines[["top", "right"]].set_visible(False)
 ax.legend(ncol=3, frameon=False, loc="upper right", fontsize=13)
-fig.subplots_adjust(left=0.065, right=0.99, top=0.90, bottom=0.39)
+fig.subplots_adjust(left=0.065, right=0.99, top=0.98, bottom=0.39)
 land_path = IMAGE_DIR / "landcover_mae.pdf"
 fig.savefig(land_path, bbox_inches="tight", dpi=300)
 plt.show()
@@ -438,8 +446,19 @@ ax.spines[["top", "right"]].set_visible(False)
 ax.legend(ncol=3, frameon=False, loc="upper left", fontsize=5.5,
           handlelength=1.4, columnspacing=0.9)
 
-fig.suptitle("Phenology Examples and Error by Spatial Variation", fontsize=9, y=0.995)
-fig.subplots_adjust(left=0.16, right=0.985, top=0.94, bottom=0.08)
+fig.subplots_adjust(left=0.16, right=0.985, top=0.99, bottom=0.08)
+# Center the qualitative row over the full visible bar-chart footprint, which
+# extends left of the plotting axis because of its tick labels and y-axis label.
+for image_ax in image_axes:
+    position = image_ax.get_position()
+    image_ax.set_position([
+        position.x0 - 0.04, position.y0, position.width, position.height
+    ])
+cbar_position = cbar_ax.get_position()
+cbar_ax.set_position([
+    cbar_position.x0 - 0.04, cbar_position.y0,
+    cbar_position.width, cbar_position.height,
+])
 smooth_path = IMAGE_DIR / "spatial_variation_tertiles.pdf"
 fig.savefig(smooth_path, bbox_inches="tight", dpi=300)
 plt.show()
