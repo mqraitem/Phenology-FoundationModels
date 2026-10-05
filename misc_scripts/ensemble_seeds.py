@@ -10,7 +10,7 @@ Output structure:
 
 Usage:
     python misc_scripts/ensemble_seeds.py \
-        --model transformer_1d_paper_1.0 \
+        --model transformer_1d_paper_nl3_1.0 \
         --selected_months 3 6 9 12
 
     python misc_scripts/ensemble_seeds.py \
@@ -65,7 +65,7 @@ def compute_mae(df):
 def main():
     parser = argparse.ArgumentParser(description="Fit convex ensemble across seeds of the same model")
     parser.add_argument("--model", type=str, required=True,
-                        help="Model group name, e.g. transformer_1d_paper_1.0")
+                        help="Model group name, e.g. transformer_1d_paper_nl3_1.0")
     parser.add_argument("--selected_months", type=int, nargs="+", default=[3, 6, 9, 12])
     parser.add_argument("--seeds", type=str, nargs="+", default=None,
                         help="Subset of seeds to ensemble (e.g. seed_42 seed_123 seed_456). "

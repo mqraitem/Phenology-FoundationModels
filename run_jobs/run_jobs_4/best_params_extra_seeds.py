@@ -45,7 +45,7 @@ def submit(cmd, seed, name):
 
 # ---- Temporal Transformer ----
 def submit_transformer():
-    group = "transformer_1d_paper"
+    group = "transformer_1d_paper_nl3"
     name = best_hp_name(f"{group}_{data_percentage}")
     if name is None:
         return

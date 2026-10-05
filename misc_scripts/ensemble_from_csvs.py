@@ -13,12 +13,12 @@ Produces an ensemble for each seed independently, then saves:
 
 Usage:
     python misc_scripts/ensemble_from_csvs.py \
-        --methods transformer_1d_paper_1.0 presto_1.0 \
+        --methods transformer_1d_paper_nl3_1.0 presto_1.0 \
         --selected_months 3 6 9 12 \
         --name ensemble_transformer_presto
 
     python misc_scripts/ensemble_from_csvs.py \
-        --methods transformer_1d_paper_1.0 presto_1.0 \
+        --methods transformer_1d_paper_nl3_1.0 presto_1.0 \
                   prithvi_final_100m_crop32_1.0 \
         --selected_months 3 6 9 12 \
         --name ensemble_all
@@ -133,7 +133,7 @@ def main():
     parser.add_argument(
         "--methods", type=str, nargs="+", required=True,
         help="Model group names (directory names under results/), e.g. "
-             "transformer_1d_paper_1.0 presto_1.0",
+             "transformer_1d_paper_nl3_1.0 presto_1.0",
     )
     parser.add_argument(
         "--selected_months", type=int, nargs="+", default=[3, 6, 9, 12],

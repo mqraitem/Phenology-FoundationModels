@@ -1,10 +1,10 @@
 """
 Training script for the paper-matched 1D Temporal Transformer.
 
-Architecture and optimization choices follow Tran et al. (2025):
-  - d_model=64, 4 layers, 4 heads, dropout=0.1, ReLU, sigmoid output
-  - AdamW, LR=0.01, batch=1024, 80 epochs, 5 warmup, weight_decay=1e-4
-  - Spatial subsampling (every 10th pixel)
+Architecture follows Tran et al. (2025): d_model=64, 3 layers, 4 heads,
+dropout=0.1, ReLU, sigmoid output. Unlike their dense EVI2 setup, the model
+takes 6-band monthly HLS composites, regresses the four dates directly, and is
+trained on all valid pixels (AdamW, weight_decay=1e-4, warmup + cosine LR).
 """
 
 import os
@@ -47,7 +47,7 @@ def main():
 					   help="Dropout rate for the transformer")
 	parser.add_argument("--d_model", type=int, default=64,
 					   help="Transformer feature dimension")
-	parser.add_argument("--num_layers", type=int, default=4,
+	parser.add_argument("--num_layers", type=int, default=3,
 					   help="Number of transformer encoder layers")
 	parser.add_argument("--nhead", type=int, default=4,
 					   help="Number of attention heads")

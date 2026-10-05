@@ -15,7 +15,7 @@ SEEDS_GB=("seed_789" "seed_101" "seed_202")
 SEEDS_GC=("seed_303" "seed_404" "seed_505")
 
 INTRA_MODELS=(
-    "transformer_1d_paper_1.0"
+    "transformer_1d_paper_nl3_1.0"
     "presto_1.0"
     "prithvi_final_100m_crop32_1.0"
 )
@@ -28,17 +28,17 @@ for months in "3 6 9 12" "3 4 5 6 7 8 9 10" "1 2 3 4 5 6 7 8 9 10 11 12"; do
 
     # ---- Cross-model ensembles (per-seed paired) ----
     python misc_scripts/ensemble_from_csvs.py \
-        --methods transformer_1d_paper_1.0 presto_1.0 \
+        --methods transformer_1d_paper_nl3_1.0 presto_1.0 \
         --selected_months $months \
         --name ensemble_transformer_presto
 
     python misc_scripts/ensemble_from_csvs.py \
-        --methods transformer_1d_paper_1.0 prithvi_final_100m_crop32_1.0 \
+        --methods transformer_1d_paper_nl3_1.0 prithvi_final_100m_crop32_1.0 \
         --selected_months $months \
         --name ensemble_transformer_prithvi
 
     python misc_scripts/ensemble_from_csvs.py \
-        --methods transformer_1d_paper_1.0 presto_1.0 \
+        --methods transformer_1d_paper_nl3_1.0 presto_1.0 \
                   prithvi_final_100m_crop32_1.0 \
         --selected_months $months \
         --name ensemble_all

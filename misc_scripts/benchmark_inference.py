@@ -67,7 +67,7 @@ def benchmark_transformer_1d(T, n_tiles, device, chunk_size=None):
 
     model = TemporalTransformerPaper(
         input_channels=N_BANDS, seq_len=T, num_classes=N_CLASSES,
-        d_model=64, nhead=4, num_layers=4, dropout=0.0,
+        d_model=64, nhead=4, num_layers=3, dropout=0.0,
     ).to(device).eval()
 
     # Find best chunk size BEFORE compiling (avoid recompilation per shape)
@@ -264,7 +264,7 @@ def benchmark_ensemble(T, n_tiles, device, transformer_cs=1000, presto_cs=2048, 
     # Initialize all 3 models
     transformer = TemporalTransformerPaper(
         input_channels=N_BANDS, seq_len=T, num_classes=N_CLASSES,
-        d_model=64, nhead=4, num_layers=4, dropout=0.0,
+        d_model=64, nhead=4, num_layers=3, dropout=0.0,
     ).to(device).eval()
     transformer = torch.compile(transformer)
 

@@ -4,7 +4,7 @@ from Tran et al. (2025) "A transformer-based model for detecting land surface
 phenology from the irregular harmonized Landsat and Sentinel-2 time series".
 
 Key differences from transformer_1d.py:
-  - d_model=64, num_layers=4 (paper's best)
+  - d_model=64, num_layers=3, nhead=4 (Tran et al.'s configuration)
   - Sigmoid output activation
   - ReLU in FFN (same as paper)
 """
@@ -32,7 +32,7 @@ class PositionalEncoding(nn.Module):
 
 class TemporalTransformerPaper(nn.Module):
     def __init__(self, input_channels=6, seq_len=4, num_classes=4, d_model=64,
-                 nhead=4, num_layers=4, dropout=0.1):
+                 nhead=4, num_layers=3, dropout=0.1):
         super().__init__()
 
         self.seq_len = seq_len
