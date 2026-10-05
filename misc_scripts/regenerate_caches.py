@@ -2,8 +2,8 @@
 
 Run this BEFORE submitting batch jobs to avoid race conditions.
 
-Usage:
-    python regenerate_caches.py
+Usage (from the repository root):
+    python misc_scripts/regenerate_caches.py
 """
 
 import sys, os; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
@@ -18,8 +18,8 @@ from lib.dataloaders.pixel_coordinate_dataset import PixelCoordinateDataset
 
 MONTH_SUBSETS = [
     [3, 6, 9, 12],
-    # [3, 4, 5, 6, 7, 8, 9, 10],
-    # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    [3, 4, 5, 6, 7, 8, 9, 10],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
 ]
 
 DATA_PERCENTAGE = 1.0

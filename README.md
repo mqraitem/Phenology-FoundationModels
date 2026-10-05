@@ -16,6 +16,10 @@ Presto, and a temporal transformer baseline.
 3. Place the Prithvi EO 2.0 weights at the `model_weights` paths in `config.json`
    (`data/prithvi_checkpoints/`). Presto ships with the repo (`lib/models/presto/`).
 4. Place the CEC ecoregion shapefiles in `useco1/` (Level I) and `useco2/` (Level II).
+5. Build the shared data caches once, before submitting jobs:
+   ```bash
+   python misc_scripts/regenerate_caches.py
+   ```
 
 All commands run from the repository root. Month subsets are `3 6 9 12` (T=4),
 `3 4 5 6 7 8 9 10` (T=8), and `1 2 3 4 5 6 7 8 9 10 11 12` (T=12); scripts under
@@ -23,8 +27,9 @@ All commands run from the repository root. Month subsets are `3 6 9 12` (T=4),
 
 ## 1. Train
 
-The launchers submit SGE jobs (`qsub`) for the hyperparameter grid over seeds
-42, 123, and 456.
+The launchers submit SGE jobs (`qsub`, scripts in `run_jobs/sge_scripts/`; set
+`-P` to your cluster's project) for the hyperparameter grid over seeds 42, 123,
+and 456.
 
 ```bash
 python run_jobs/run_jobs_4/transformer_1d_paper.py   # Temporal Transformer
@@ -32,10 +37,11 @@ python run_jobs/run_jobs_4/presto.py                 # Presto
 python run_jobs/run_jobs_4/prithvi_crop32.py         # Prithvi (100M, 32x32 crops)
 ```
 
-Ablations (T=4) are the other modules in `run_jobs/run_jobs_4/`
-(`prithvi_crops_ablation.py`, `prithvi_no_concat.py`, `prithvi_notimeloc.py`,
-`prithvi_nopretrain*.py`, `presto_notimeloc*.py`, `presto_nopretrain.py`,
-`presto_nolocdrop_nodropout.py`, ...).
+Ablations are the other modules in `run_jobs/run_jobs_4/` (crop size, raw-input
+concatenation, pretraining and time/location for Prithvi and Presto); the Presto
+regularization ablation (`presto_nolocdrop_nodropout.py`) exists for every T.
+`run_jobs/presto_100epoch_check.py` runs the 100-epoch Presto comparison
+reported in the appendix.
 
 ## 2. Select hyperparameters
 
