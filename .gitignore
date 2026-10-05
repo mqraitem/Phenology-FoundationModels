@@ -4,6 +4,7 @@ records/
 results/
 wandb/
 useco1/
+useco2/
 config.json
 
 # Python
@@ -34,3 +35,4 @@ sync_to_overleaf.py
 
 # Notes / scratch
 Project.md
+results_backup/
