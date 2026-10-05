@@ -10,6 +10,8 @@ It is included directly rather than as a submodule because the project applies s
 
 No model architecture or weights have been changed.
 
+The pretrained weights (`data/default_model.pt`, 3.3 MB, from upstream `data/default_model.pt`) are included unchanged; the rest of upstream's `data/` directory is not.
+
 ## License
 
 Presto is distributed under the MIT License; see `LICENSE` in this directory. All upstream copyright notices are preserved.

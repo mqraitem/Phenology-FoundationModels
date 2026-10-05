@@ -36,3 +36,8 @@ sync_to_overleaf.py
 # Notes / scratch
 Project.md
 results_backup/
+
+# Vendored Presto pretrained weights (MIT, 3.3 MB) are committed; other Presto data is not.
+!lib/models/presto/data/
+lib/models/presto/data/*
+!lib/models/presto/data/default_model.pt
