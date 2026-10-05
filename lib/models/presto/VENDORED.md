@@ -6,7 +6,7 @@ It is included directly rather than as a submodule because the project applies s
 
 ## Modifications
 
-- **`presto/presto.py`** — replace the imports of `DynamicWorld2020_2021` and `BANDS_GROUPS_IDX` from `dataops.pipelines.*` with hardcoded inline definitions; comment out an upstream month-range assertion that fires for our DOY encoding.
+- **`presto/presto.py`** — replace the imports of `DynamicWorld2020_2021` and `BANDS_GROUPS_IDX` from `dataops.pipelines.*` with hardcoded inline definitions; comment out an upstream month-range assertion that fires for our DOY encoding; disable attention dropout outside training (`dropout_p=self.attn_drop.p if self.training else 0.0`), since upstream passes `dropout_p` to `scaled_dot_product_attention` unconditionally.
 
 No model architecture or weights have been changed.
 

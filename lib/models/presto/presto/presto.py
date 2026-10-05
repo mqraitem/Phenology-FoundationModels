@@ -73,7 +73,7 @@ class Attention(nn.Module):
                 v,
                 # a value of True indicates that the element should take part in attention
                 attn_mask=attn_mask,
-                dropout_p=self.attn_drop.p,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
             )
         else:
             if attn_mask is not None:
