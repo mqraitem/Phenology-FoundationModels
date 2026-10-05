@@ -9,7 +9,12 @@
 #$ -l gpu_c=8.6
 
 conda activate geo
-export WANDB_CACHE_DIR=/projectnb/ivc-ml/mqraitem/.cache/wandb
+wandb_tmp="${TMPDIR:-/tmp}/wandb-${JOB_ID:-$$}"
+mkdir -p "$wandb_tmp/cache" "$wandb_tmp/config"
+export WANDB_CACHE_DIR="$wandb_tmp/cache"
+export WANDB_CONFIG_DIR="$wandb_tmp/config"
+export WANDB_DIR="$wandb_tmp"
+export WANDB_CONSOLE=off
 
 # Increase wandb tolerance for slow nodes / long epochs
 export WANDB__SERVICE_WAIT=300

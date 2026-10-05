@@ -24,6 +24,8 @@ def main():
 						help="Which months to use (e.g., 3 6 9 12)")
 	parser.add_argument("--model-groups", nargs="+", default=None,
 						help="Optional exact model-group names to evaluate")
+	parser.add_argument("--force", action="store_true",
+						help="Overwrite existing result CSVs for the requested split")
 	args = parser.parse_args()
 
 	selected_months = args.selected_months
@@ -84,7 +86,7 @@ def main():
 			best_param = row["Best Param"]
 
 			output_file = os.path.join(results_dir, f"{seed}_{data_loader_name}.csv")
-			if os.path.exists(output_file):
+			if os.path.exists(output_file) and not args.force:
 				print(f"Results for {model_name}/{seed} on {data_loader_name} already exist, skipping...")
 				continue
 

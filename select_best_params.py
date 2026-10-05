@@ -57,6 +57,13 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--selected_months", type=int, nargs="+", default=[3, 6, 9, 12],
 						help="Which months to use (e.g., 3 6 9 12)")
+	parser.add_argument("--group", action="append",
+						help="Exact checkpoint group to evaluate; repeat to select multiple groups")
+	parser.add_argument("--selection-seeds", type=int, nargs="+", default=[42, 123, 456],
+						help="Seeds used for hyperparameter selection (default: 42 123 456)")
+	parser.add_argument("--include-extra-seeds", action="store_true",
+						help="Also write best_params.csv rows for non-selection seeds that "
+						     "have a checkpoint at the selected hyperparameter")
 	parser.add_argument("--force", action="store_true",
 						help="Recompute even if best_params.csv already exists")
 	args = parser.parse_args()
@@ -80,6 +87,11 @@ def main():
 	supported = ["prithvi", "transformer_1d", "presto"]
 
 	all_groups = [g for g in all_groups if any(s in g for s in supported)]
+	if args.group:
+		missing_groups = sorted(set(args.group) - set(all_groups))
+		if missing_groups:
+			parser.error(f"Checkpoint group(s) not found: {', '.join(missing_groups)}")
+		all_groups = [g for g in all_groups if g in args.group]
 
 	for group_idx, group_name in enumerate(all_groups):
 
@@ -98,11 +110,18 @@ def main():
 
 		# Find seed subdirectories
 		group_path = os.path.join(groups_dir, group)
-		seed_dirs = sorted([d for d in os.listdir(group_path)
-		                    if d.startswith("seed_") and os.path.isdir(os.path.join(group_path, d))])
+		selection_seed_dirs = {f"seed_{seed}" for seed in args.selection_seeds}
+		seed_dirs = sorted([
+			d for d in os.listdir(group_path)
+			if d in selection_seed_dirs and os.path.isdir(os.path.join(group_path, d))
+		])
 
-		if not seed_dirs:
-			print(f"No seed directories found in {group_path}, skipping.")
+		missing_seed_dirs = sorted(selection_seed_dirs - set(seed_dirs))
+		if missing_seed_dirs:
+			print(
+				f"Missing selection seed directories in {group_path}: "
+				f"{', '.join(missing_seed_dirs)}; skipping."
+			)
 			continue
 
 		# Count total checkpoints
@@ -237,6 +256,20 @@ def main():
 			if seed_dir in hp_seed_maes.get(best_hp, {}):
 				_, filename = hp_seed_maes[best_hp][seed_dir]
 				rows.append({"Seed": seed_dir, "Best Param": filename})
+
+		if args.include_extra_seeds and best_hp is not None:
+			extra_seed_dirs = sorted(
+				d for d in os.listdir(group_path)
+				if d.startswith("seed_") and d not in seed_dirs
+				and os.path.isdir(os.path.join(group_path, d))
+			)
+			for seed_dir in extra_seed_dirs:
+				seed_num = seed_dir.removeprefix("seed_")
+				filename = f"{best_hp}_seed-{seed_num}.pth"
+				if os.path.exists(os.path.join(group_path, seed_dir, filename)):
+					rows.append({"Seed": seed_dir, "Best Param": filename})
+				else:
+					print(f"  Extra seed {seed_dir}: no checkpoint at selected HP ({filename})")
 
 		if rows:
 			param_df = pd.DataFrame(rows)
