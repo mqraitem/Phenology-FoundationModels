@@ -27,5 +27,5 @@ def test_summary_pools_observations_within_seed():
     })
     result = summarize_seed_pooled(df, ["model"]).iloc[0]
     assert result["mean"] == 23.5  # seed a: 190/10 = 19; seed b: 280/10 = 28
-    assert result["seed_std"] == 4.5
+    assert np.isclose(result["seed_std"], np.std([19.0, 28.0], ddof=1))
     assert result["n_seeds"] == 2

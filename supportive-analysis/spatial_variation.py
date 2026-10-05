@@ -82,7 +82,7 @@ def summarize_by_tertile(scores: pd.DataFrame, tile_mae: pd.DataFrame) -> pd.Dat
                 .agg(seed_mae=("mae_days", "mean"), n_tile_years=("tile_id", "nunique")))
     return (per_seed.groupby(["bin", "model"], as_index=False)
             .agg(mean_mae=("seed_mae", "mean"),
-                 seed_std=("seed_mae", lambda x: float(np.std(x, ddof=0))),
+                 seed_std=("seed_mae", lambda x: float(np.std(x, ddof=1)) if len(x) > 1 else 0.0),
                  n_seeds=("seed", "nunique"), n_tile_years=("n_tile_years", "min")))
 
 

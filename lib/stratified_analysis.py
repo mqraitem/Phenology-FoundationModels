@@ -66,7 +66,7 @@ def summarize_seed_pooled(tile_df: pd.DataFrame, group_cols: list[str]) -> pd.Da
         per_seed.groupby(group_cols, as_index=False)
         .agg(
             mean=("seed_mean", "mean"),
-            seed_std=("seed_mean", lambda x: float(np.std(x, ddof=0))),
+            seed_std=("seed_mean", lambda x: float(np.std(x, ddof=1)) if len(x) > 1 else 0.0),
             n_seeds=("seed", "nunique"),
         )
     )
