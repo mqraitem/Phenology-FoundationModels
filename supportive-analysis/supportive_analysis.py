@@ -6,16 +6,16 @@ interactively, or review it as ordinary Python. Run it from the repository root.
 
 # # Ecoregion, Land-Cover, and Spatial Smoothness Analysis
 # 
-# This notebook analyzes the **4-month test setting** (March, June, September, December) for Temporal Transformer, Presto, and Prithvi. Dense predictions are generated offline for seeds 42, 123, and 456 by `supportive-analysis/prepare_stratified_data.py`; this notebook reads compact tile-level tables and runs on CPU.
+# This notebook analyzes the **4-month test setting** (March, June, September, December) for Temporal Transformer, Presto, and Prithvi. It reads compact tables built by the other scripts in this directory and runs on CPU.
 # 
-# All MAE summaries are tile-year balanced: calculate a metric within each tile-year, average tile-years within each seed, then average the three seeds. This prevents large tiles or common pixel classes from dominating the result.
+# Ecoregion and land-cover summaries pool absolute error over all valid pixels of each stratum within a seed, then average the three seeds, so small patches and boundary slivers contribute in proportion to their size. Spatial-variation tertiles use tile-year MAE (averaged within seed, then across seeds), matching the headline results.
 # 
-# To rebuild the derived cache on a GPU node:
+# To rebuild the inputs (see `supportive-analysis/README.md`):
 # 
 # ```bash
-# conda run -n geo python supportive-analysis/prepare_stratified_data.py \
-#   --seeds seed_42 seed_123 seed_456 \
-#   --out-dir data/stratified_analysis/m3-6-9-12
+# python supportive-analysis/build_tile_layers.py          # CPU: reference dates, masks, ecoregion IDs
+# python supportive-analysis/prepare_stratified_data.py    # GPU: dense inference, per-stratum errors
+# python supportive-analysis/spatial_variation.py          # CPU: spatial-variation scores and tertiles
 # ```
 
 # %%
@@ -39,11 +39,15 @@ from IPython.display import display
 from shapely import make_valid
 from shapely.geometry import box
 
-from lib.stratified_analysis import summarize_seed_balanced
+from lib.stratified_analysis import summarize_seed_pooled
+
+# A tile-year counts toward a stratum's site/tile-year support only if it has at
+# least this many valid phase-pixel observations there (~100 pixels x 4 phases).
+MIN_SUPPORT_OBS = 400
 
 CACHE_DIR = REPO_ROOT / "data/stratified_analysis/m3-6-9-12"
-SMOOTH_DIR = REPO_ROOT / "data/stratified_analysis/smoothness_metric_comparison"
-TILE_DIR = REPO_ROOT / "student_test_tiles_m3-6-9-12/data/m3-6-9-12/test"
+SPATIAL_DIR = REPO_ROOT / "data/stratified_analysis/spatial_variation"
+TILE_DIR = REPO_ROOT / "data/stratified_analysis/tile_layers"
 IMAGE_DIR = REPO_ROOT / "paper_latex/Images"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -54,20 +58,18 @@ MODEL_LABELS = {
     "prithvi": "Prithvi",
 }
 MODEL_COLORS = dict(zip(MODEL_ORDER, sns.color_palette("Set2", 3)))
-PHASE_ORDER = ["Greenup", "Maturity", "Senescence/Silking", "Dormancy/Dough"]
-PHASE_LABELS = ["Greenup", "Maturity", "Senescence", "Dormancy"]
 
 required = [
     "manifest.json", "ecoregion_tile_mae.csv", "landcover_tile_mae.csv",
-    "smoothness_tile_phase.csv", "ecoregion_l1_us.geojson", "us_states.geojson",
+    "ecoregion_l1_us.geojson", "us_states.geojson",
 ]
 missing = [name for name in required if not (CACHE_DIR / name).exists()]
 assert not missing, f"Missing cache files: {missing}. Run the GPU cache builder first."
-smooth_required = ["gt_smoothness_tertiles.csv", "mae_by_smoothness_tertile.csv"]
-smooth_missing = [name for name in smooth_required if not (SMOOTH_DIR / name).exists()]
-assert not smooth_missing, (
-    f"Missing smoothness files: {smooth_missing}. Run "
-    "supportive-analysis/evaluate_smoothness_metrics.py first."
+spatial_required = ["tile_scores.csv", "mae_by_tertile.csv"]
+spatial_missing = [name for name in spatial_required if not (SPATIAL_DIR / name).exists()]
+assert not spatial_missing, (
+    f"Missing spatial-variation files: {spatial_missing}. Run "
+    "supportive-analysis/spatial_variation.py first."
 )
 
 manifest = json.loads((CACHE_DIR / "manifest.json").read_text())
@@ -78,9 +80,9 @@ manifest
 
 # ## Analysis 1: Mean Error by CEC Level I Ecoregion
 # 
-# For each model, seed, tile-year, and ecoregion, absolute error is pooled over valid pixels and all four phenophases. Region values are then averaged equally across tile-years and seeds. Water is excluded. The map uses categorical region colors; exact model MAEs and support counts are reported in the adjacent key.
+# For each model, seed, and ecoregion, absolute error is pooled over all valid pixels and all four phenophases in that region, then averaged equally across seeds. Pooling weights each tile-year by its number of valid pixels in the region, so boundary slivers do not count as full tile-years. Water is excluded. The map uses categorical region colors; exact model MAEs and support counts are reported in the adjacent key.
 # 
-# The test set covers eight terrestrial Level I regions, but geographic support is uneven. We report only regions represented by at least two independent sites; the table gives independent-site and tile-year counts.
+# The test set covers eight terrestrial Level I regions, but geographic support is uneven. A tile-year counts toward a region's support only if it has at least 100 valid pixels there (400 phase-pixel observations). We report only regions represented by at least two independent sites; the table gives independent-site and tile-year counts.
 
 # %%
 
@@ -89,16 +91,17 @@ eco_raw = pd.read_csv(CACHE_DIR / "ecoregion_tile_mae.csv")
 assert set(eco_raw["seed"]) == set(manifest["seeds"])
 assert set(eco_raw["model"]) == set(MODEL_ORDER)
 
-eco_summary = summarize_seed_balanced(
+eco_summary = summarize_seed_pooled(
     eco_raw, ["model", "eco_region_l1_id", "eco_region_name"]
 )
 support = (
-    eco_raw.groupby(["eco_region_l1_id", "eco_region_name"], as_index=False)
+    eco_raw[eco_raw["n_valid"] >= MIN_SUPPORT_OBS]
+    .groupby(["eco_region_l1_id", "eco_region_name"], as_index=False)
     .agg(n_sites=("site_id", "nunique"), n_tile_years=("tile_id", "nunique"))
 )
 supported_regions = support.loc[support["n_sites"] >= 2, "eco_region_l1_id"]
 eco_summary = eco_summary[eco_summary["eco_region_l1_id"].isin(supported_regions)].copy()
-eco_summary = eco_summary.drop(columns="n_tile_years").merge(
+eco_summary = eco_summary.merge(
     support, on=["eco_region_l1_id", "eco_region_name"], how="left"
 )
 
@@ -230,25 +233,25 @@ print(f"Saved: {eco_path}")
 
 # ## Analysis 2: Mean Error by NLCD Land-Cover Class
 # 
-# Annual NLCD 2019/2020 classes are aligned to each 30 m HLS grid using nearest-neighbor resampling. A tile/class estimate must contain at least **400 valid phase-pixel observations**, approximately 100 spatial pixels observed across four phases. A displayed class must occur in at least **three tile-years**. Alaska is absent because Annual NLCD used here covers CONUS only.
+# Annual NLCD 2019/2020 classes are aligned to each 30 m HLS grid using nearest-neighbor resampling. A tile-year counts toward a class's support only if it has at least **400 valid phase-pixel observations** of that class (approximately 100 spatial pixels across four phases). A displayed class must be supported by at least **three tile-years**. Alaska is absent because Annual NLCD used here covers CONUS only.
 # 
-# Bars show the mean of tile-year MAEs after equal seed averaging. Error bars are standard deviations across the three seeds.
+# Bars show MAE pooled over all valid pixels of each class within seed, then averaged equally across seeds. Error bars are standard deviations across the three seeds.
 
 # %%
 
 
 land_raw = pd.read_csv(CACHE_DIR / "landcover_tile_mae.csv")
-land_eligible = land_raw[land_raw["n_valid"] >= 400].copy()
 class_support = (
-    land_eligible.groupby(["landcover_id", "landcover_name"], as_index=False)
+    land_raw[land_raw["n_valid"] >= MIN_SUPPORT_OBS]
+    .groupby(["landcover_id", "landcover_name"], as_index=False)
     .agg(n_tile_years=("tile_id", "nunique"), n_sites=("site_id", "nunique"))
 )
 keep_ids = class_support.loc[class_support["n_tile_years"] >= 3, "landcover_id"]
-land_eligible = land_eligible[land_eligible["landcover_id"].isin(keep_ids)]
+land_eligible = land_raw[land_raw["landcover_id"].isin(keep_ids)]
 
-land_summary = summarize_seed_balanced(
+land_summary = summarize_seed_pooled(
     land_eligible, ["model", "landcover_id", "landcover_name"]
-).drop(columns="n_tile_years").merge(
+).merge(
     class_support, on=["landcover_id", "landcover_name"], how="left"
 )
 
@@ -323,16 +326,14 @@ print(f"Saved: {land_path}")
 # 
 # Ground-truth spatial variation is measured robustly at multiple scales. For each phenophase, the median absolute DOY difference is calculated between valid horizontal and vertical pixel pairs at lags of 1, 2, 4, and 8 pixels. The four lag values are averaged, each phenophase is standardized across the 48 test tile-years, and the four standardized phase scores are averaged equally.
 # 
-# Tile-years are divided into equal-count tertiles of **16 tile-years each**. The map examples are the tile-year nearest the median score within each tertile; they are illustrative and do not determine the aggregate bars. Bars report tile-year-balanced MAE averaged over all four phenophases and then equally over seeds 42, 123, and 456. Error bars show standard deviation across seeds.
+# Tile-years are divided into equal-count tertiles of **16 tile-years each**. The map examples are illustrative and do not determine the aggregate bars: for the smoothest and roughest tertiles they are the nearly complete (>= 90% valid) tile-year nearest the tertile's median score; for the intermediate tertile we show WY-3 (2019), a nearly complete tile-year chosen for legibility rather than proximity to the median. Bars report tile-year-balanced MAE averaged over all four phenophases and then equally over seeds 42, 123, and 456. Error bars show standard deviation across seeds.
 
 # %%
 
 
 BIN_ORDER = ["Smoothest", "Intermediate", "Roughest"]
-smooth_bins = pd.read_csv(SMOOTH_DIR / "gt_smoothness_tertiles.csv")
-smooth_bins = smooth_bins[smooth_bins["metric"] == "robust_multiscale"].copy()
-smooth_mae = pd.read_csv(SMOOTH_DIR / "mae_by_smoothness_tertile.csv")
-smooth_mae = smooth_mae[smooth_mae["metric"] == "robust_multiscale"].copy()
+smooth_bins = pd.read_csv(SPATIAL_DIR / "tile_scores.csv")
+smooth_mae = pd.read_csv(SPATIAL_DIR / "mae_by_tertile.csv")
 
 assert smooth_bins.groupby("bin").size().reindex(BIN_ORDER).eq(16).all()
 assert smooth_mae["n_seeds"].eq(3).all()
@@ -350,7 +351,7 @@ representatives = (
     .drop_duplicates("bin")
     .set_index("bin").reindex(BIN_ORDER)
 )
-# Use a nearly complete, visually legible intermediate example.
+# Intermediate example chosen for legibility (documented in the markdown above).
 intermediate_example = smooth_bins.set_index("tile_id").loc["2019_WY-3_T12TWP"]
 for column in ["site_id", "year", "score", "valid_fraction"]:
     representatives.loc["Intermediate", column] = intermediate_example[column]
@@ -369,7 +370,6 @@ display(
 # %%
 
 
-phase_codes = ["G", "M", "S", "D"]
 representative_tiles = {}
 for bin_name in BIN_ORDER:
     tile_id = representatives.loc[bin_name, "tile_id"]

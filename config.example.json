@@ -2,7 +2,10 @@
   "data": {
     "hls_composites": "/path/to/HLS_composites",
     "lsp_ancillary": "/path/to/LSP_ancillary",
-    "geojson": "/path/to/geotiff_extents.geojson"
+    "geojson": "/path/to/geotiff_extents.geojson",
+    "nlcd_2019": "/path/to/Annual_NLCD_LndCov_2019_CU_C1V2.tif",
+    "nlcd_2020": "/path/to/Annual_NLCD_LndCov_2020_CU_C1V2.tif",
+    "us_states": "/path/to/us_states.geojson"
   },
   "storage": {
     "mean_stds": "data/mean_stds",
@@ -24,7 +27,7 @@
       {"site_id": "AZ-2", "hls_tile": "T12SVE"},
       {"site_id": "MI-1", "hls_tile": "T15TYM"},
       {"site_id": "AR-1", "hls_tile": "T15SYV"},
-      {"site_id": "AK-1", "hls_tile": "T06VWR"}
+      {"site_id": "NH-2", "hls_tile": "T18TYP"}
     ]
   },
   "wandb": {

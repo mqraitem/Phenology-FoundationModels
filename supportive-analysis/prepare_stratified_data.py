@@ -1,7 +1,9 @@
-"""Build compact tile-level tables for ecoregion, land-cover, and smoothness analysis.
+"""Build compact tile-level error tables for the ecoregion and land-cover analyses.
 
-Dense inference is streamed over the 4-month test split. Predictions are reduced
-immediately to tile-level metrics and are not saved to disk.
+Dense inference is streamed over the 4-month test split for each model and seed.
+Predictions are reduced immediately to per-tile, per-stratum error sums and are not
+saved to disk. Reference dates and ecoregion IDs come from the tile layers written
+by ``build_tile_layers.py``.
 """
 
 from __future__ import annotations
@@ -22,14 +24,20 @@ from rasterio.warp import Resampling, reproject
 import torch
 from torch.utils.data import DataLoader
 
+import path_config
 from lib.dataloaders.centroid_tile_dataset import CentroidTileDataset
 from lib.dataloaders.pixel_coordinate_tile_dataset import PixelCoordinateTileDataset
-from lib.stratified_analysis import masked_group_errors, neighbor_smoothness
-from lib.utils import get_data_paths, months_to_str
-from misc_scripts.build_student_test_tiles import MODEL_GROUPS, SELECTED_MONTHS, _predict_tile, _prepare_models
+from lib.stratified_analysis import masked_group_errors
+from lib.utils import batched_sliding_window, build_model, get_data_paths, months_to_str
 
 
+SELECTED_MONTHS = [3, 6, 9, 12]
 CANONICAL_SEEDS = ["seed_42", "seed_123", "seed_456"]
+MODEL_GROUPS = {
+    "temporal_transformer": "transformer_1d_paper_nl3_1.0",
+    "presto": "presto_1.0",
+    "prithvi": "prithvi_final_100m_crop32_1.0",
+}
 NLCD_NAMES = {
     11: "Open water", 12: "Perennial ice/snow", 21: "Developed, open space",
     22: "Developed, low intensity", 23: "Developed, medium intensity",
@@ -38,6 +46,42 @@ NLCD_NAMES = {
     71: "Grassland/herbaceous", 81: "Pasture/hay", 82: "Cultivated crops",
     90: "Woody wetlands", 95: "Emergent herbaceous wetlands",
 }
+
+
+def _prepare_models(device: str, seed: str):
+    """Load each model's selected checkpoint for one seed."""
+    months_sub = f"m{months_to_str(SELECTED_MONTHS)}"
+    models, params = {}, {}
+    for model_key, group in MODEL_GROUPS.items():
+        best = pd.read_csv(Path("results") / months_sub / group / "best_params.csv")
+        param = str(best.loc[best["Seed"] == seed, "Best Param"].iloc[0])
+        model, crop_size = build_model(group, param, n_timesteps=len(SELECTED_MONTHS))
+        ckpt_path = Path(path_config.get_checkpoint_root()) / months_sub / group / seed / param
+        model.load_state_dict(torch.load(ckpt_path, map_location="cpu")["model_state_dict"])
+        models[model_key] = (model.to(device).eval(), crop_size)
+        params[model_key] = {"group": group, "seed": seed, "checkpoint": param}
+    return models, params
+
+
+def _predict_tile(model_key, model, crop_size, data_hls, data_presto, month_tensor, device) -> np.ndarray:
+    """Dense (4, 330, 330) prediction in DOY for one tile."""
+    with torch.no_grad():
+        if model_key == "presto":
+            pred = model(
+                data_presto["image"], processing_images=True,
+                latlons=data_presto["latlons"].to(device), month=month_tensor,
+            )[0, :, :330, :330]
+        elif model_key == "prithvi":
+            image = data_hls["image"]
+            pred = batched_sliding_window(
+                model, image["chip"], crop_size, device, tile_size=330,
+                stride=path_config.get_eval_stride(),
+                temporal_coords=image["temporal_coords"][0],
+                location_coords=image["location_coords"][0],
+            )
+        else:
+            pred = model(data_hls["image"], processing_images=True)[0, :, :330, :330]
+    return (pred.detach().float().cpu().numpy() * 547).astype(np.float32)
 
 
 def _first_raster_profile(image_paths: list[str]) -> dict:
@@ -91,7 +135,7 @@ def _write_map_geometry(
     states[["name", "geometry"]].to_crs("EPSG:4326").to_file(states_out_path, driver="GeoJSON")
 
 
-def _build_invariant_data(args, test_paths: list, package_files: dict) -> tuple[dict, dict]:
+def _build_invariant_data(args, test_paths: list, layer_files: dict) -> tuple[dict, dict]:
     nlcd_sources = {
         2019: rasterio.open(args.nlcd_2019),
         2020: rasterio.open(args.nlcd_2020),
@@ -99,9 +143,9 @@ def _build_invariant_data(args, test_paths: list, package_files: dict) -> tuple[
     base_tiles, landcover = {}, {}
     try:
         for image_paths, _gt_path, tile_id in test_paths:
-            if tile_id not in package_files:
-                raise FileNotFoundError(f"Student tile package is missing {tile_id}")
-            tile = np.load(package_files[tile_id], allow_pickle=True)
+            if tile_id not in layer_files:
+                raise FileNotFoundError(f"Tile layers are missing {tile_id}; run build_tile_layers.py")
+            tile = np.load(layer_files[tile_id], allow_pickle=True)
             base_tiles[tile_id] = {
                 "ground_truth_doy": tile["ground_truth_doy"],
                 "ground_truth_valid": tile["ground_truth_valid"],
@@ -122,11 +166,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", nargs="+", default=CANONICAL_SEEDS)
     parser.add_argument("--out-dir", default="data/stratified_analysis/m3-6-9-12")
-    parser.add_argument("--tile-package", default="student_test_tiles_m3-6-9-12")
+    parser.add_argument("--tile-layers", default="data/stratified_analysis/tile_layers")
     parser.add_argument("--eco-shapefile", default="useco2/NA_CEC_Eco_Level2.shp")
-    parser.add_argument("--states-geojson", default="/projectnb/rise-ivc/Badr/us_states.geojson")
-    parser.add_argument("--nlcd-2019", default="/projectnb/rise-ivc/Badr/Annual_NLCD_LndCov_2019_CU_C1V2/Annual_NLCD_LndCov_2019_CU_C1V2.tif")
-    parser.add_argument("--nlcd-2020", default="/projectnb/rise-ivc/Badr/Annual_NLCD_LndCov_2020_CU_C1V2/Annual_NLCD_LndCov_2020_CU_C1V2.tif")
+    parser.add_argument("--states-geojson", default=path_config.get_path("data.us_states"))
+    parser.add_argument("--nlcd-2019", default=path_config.get_path("data.nlcd_2019"))
+    parser.add_argument("--nlcd-2020", default=path_config.get_path("data.nlcd_2020"))
     parser.add_argument("--limit", type=int)
     args = parser.parse_args()
 
@@ -139,11 +183,11 @@ def main() -> None:
     test_paths = get_data_paths("testing", 1.0, SELECTED_MONTHS)
     if args.limit is not None:
         test_paths = test_paths[:args.limit]
-    package_dir = Path(args.tile_package) / "data" / "m3-6-9-12" / "test"
-    package_files = {p.stem: p for p in package_dir.glob("*.npz")}
-    base_tiles, landcover = _build_invariant_data(args, test_paths, package_files)
+    layer_dir = Path(args.tile_layers)
+    layer_files = {p.stem: p for p in layer_dir.glob("*.npz")}
+    base_tiles, landcover = _build_invariant_data(args, test_paths, layer_files)
 
-    l1_lookup = pd.read_csv(Path(args.tile_package) / "eco_region_l1_lookup.csv")
+    l1_lookup = pd.read_csv(layer_dir / "eco_region_l1_lookup.csv")
     l1_names = dict(zip(l1_lookup["id"], l1_lookup["NA_L1NAME"]))
     _write_map_geometry(
         args.eco_shapefile, args.states_geojson, l1_lookup,
@@ -159,19 +203,7 @@ def main() -> None:
     )
     month_tensor = torch.tensor([m - 1 for m in SELECTED_MONTHS], dtype=torch.long)
 
-    eco_rows, landcover_rows, smooth_rows = [], [], []
-
-    # Analysis 3: deterministic ground-truth spatial variation by tile and phase.
-    for tile_id, tile in base_tiles.items():
-        for phase_idx, phase in enumerate(tile["phase_names"]):
-            value, count, total = neighbor_smoothness(
-                tile["ground_truth_doy"][phase_idx], tile["ground_truth_valid"][phase_idx]
-            )
-            smooth_rows.append({
-                "seed": "deterministic", "source": "ground_truth", "tile_id": tile_id,
-                "site_id": tile["site_id"], "year": tile["year"], "phase": phase,
-                "smoothness_days": value, "n_pairs": count, "difference_sum": total,
-            })
+    eco_rows, landcover_rows = [], []
 
     checkpoint_manifest = {}
     for seed in args.seeds:
@@ -218,31 +250,17 @@ def main() -> None:
                         "landcover_name": NLCD_NAMES[class_id], **row,
                     })
 
-                # Analysis 3: prediction spatial variation by model and phase.
-                for phase_idx, phase in enumerate(tile["phase_names"]):
-                    value, count, total = neighbor_smoothness(
-                        prediction[phase_idx], tile["ground_truth_valid"][phase_idx]
-                    )
-                    smooth_rows.append({
-                        "seed": seed, "source": model_key, "tile_id": tile_id,
-                        "site_id": tile["site_id"], "year": tile["year"], "phase": phase,
-                        "smoothness_days": value, "n_pairs": count, "difference_sum": total,
-                    })
         del models
         torch.cuda.empty_cache()
 
     pd.DataFrame(eco_rows).to_csv(out_dir / "ecoregion_tile_mae.csv", index=False)
     pd.DataFrame(landcover_rows).to_csv(out_dir / "landcover_tile_mae.csv", index=False)
-    pd.DataFrame(smooth_rows).to_csv(out_dir / "smoothness_tile_phase.csv", index=False)
     manifest = {
         "split": "test", "selected_months": SELECTED_MONTHS, "n_tile_years": len(test_paths),
         "seeds": args.seeds, "models": list(MODEL_GROUPS), "checkpoints": checkpoint_manifest,
-        "metrics": {
-            "mae": "linear absolute error in the extended 1-547 target domain",
-            "smoothness": "mean modulo-365 difference over valid right/down neighbor pairs",
-        },
+        "metrics": {"mae": "linear absolute error in the extended 1-547 target domain"},
         "sources": {
-            "tile_package": args.tile_package, "ecoregions": args.eco_shapefile,
+            "tile_layers": args.tile_layers, "ecoregions": args.eco_shapefile,
             "states": args.states_geojson, "nlcd_2019": args.nlcd_2019, "nlcd_2020": args.nlcd_2020,
         },
     }
