@@ -13,9 +13,9 @@ data_percentage = 1.0
 batch_size = 1024
 epochs = 50
 warmup_epochs = 10
-learning_rates = [1e-04, 1e-03]
+learning_rates = [1e-05, 1e-04, 1e-03]
 dropouts = [0.05, 0.1]
-seeds = [42]
+seeds = [42, 123, 456]
 
 group_name = "presto_notimeloc"
 wandb_project = get_wandb_project(data_percentage, months_str)
