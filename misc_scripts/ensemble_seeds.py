@@ -1,7 +1,9 @@
-"""Fit a global convex ensemble across seeds of the same model.
+"""Ensemble several seeds of the same model.
 
-Fits per-date convex weights across seeds on training pixels,
-applies them to val and test, and saves a single blended result.
+By default (--weighting equal, as in the paper) the ensemble is the plain per-pixel
+average of the seeds. --weighting learned instead fits per-date convex weights across
+seeds on training pixels (needs the train CSVs). Either way the weights are applied to
+val and test and saved as a single blended result.
 
 Output structure:
     results/{months_sub}/{model}_seed_ensemble/seed_all_test.csv
@@ -73,7 +75,11 @@ def main():
     parser.add_argument("--name_suffix", type=str, default="",
                         help="Suffix appended to the output ensemble name "
                              "(e.g. '_gA' produces <model>_seed_ensemble_gA).")
+    parser.add_argument("--weighting", choices=["equal", "learned"], default="equal",
+                        help="equal: plain average of the seeds (paper). "
+                             "learned: convex weights fitted on training predictions.")
     args = parser.parse_args()
+    learned = args.weighting == "learned"
 
     months_sub = f"m{months_to_str(args.selected_months)}"
     model_dir = os.path.join("results", months_sub, args.model)
@@ -100,6 +106,7 @@ def main():
         seeds = available_seeds
 
     print(f"Model: {args.model}")
+    print(f"Weighting: {args.weighting}")
     print(f"Available seeds: {available_seeds}")
     if args.seeds is not None:
         print(f"Using subset: {seeds}")
@@ -110,7 +117,7 @@ def main():
         print("Need at least 2 seeds for ensembling. Exiting.")
         return
 
-    # Load per-seed CSVs
+    # Load per-seed CSVs (train only to fit learned weights)
     train_dfs = []
     val_dfs = []
     test_dfs = []
@@ -119,17 +126,19 @@ def main():
         train_path = os.path.join(model_dir, f"{seed}_train.csv")
         val_path = os.path.join(model_dir, f"{seed}_val.csv")
         test_path = os.path.join(model_dir, f"{seed}_test.csv")
-        if not all(os.path.exists(p) for p in [train_path, val_path, test_path]):
-            print(f"Missing train/val/test CSV for {seed}, skipping.")
+        required = [train_path, val_path, test_path] if learned else [val_path, test_path]
+        if not all(os.path.exists(p) for p in required):
+            print(f"Missing {'train/' if learned else ''}val/test CSV for {seed}, skipping.")
             continue
-        train_dfs.append(sort_df(pd.read_csv(train_path)))
+        if learned:
+            train_dfs.append(sort_df(pd.read_csv(train_path)))
         val_dfs.append(sort_df(pd.read_csv(val_path)))
         test_dfs.append(sort_df(pd.read_csv(test_path)))
         valid_seeds.append(seed)
 
     seeds = valid_seeds
     if len(seeds) < 2:
-        print("Not enough seeds with train/val/test CSVs. Exiting.")
+        print("Not enough seeds with the required CSVs. Exiting.")
         return
 
     # Verify row alignment
@@ -139,13 +148,17 @@ def main():
                 if not (dfs[0][col] == dfs[i][col]).all():
                     raise ValueError(f"{split_name} row mismatch on '{col}' between seed 0 and {i}")
 
-    # Fit per-date weights on training
-    print("\nFitting convex weights on training...")
+    # Per-date weights: uniform, or fitted on training
     weights = {}
-    n_seeds = len(train_dfs)
+    n_seeds = len(seeds)
     uniform = np.full(n_seeds, 1.0 / n_seeds)
 
+    if learned:
+        print("\nFitting convex weights on training...")
     for pred_col, truth_col in zip(PRED_COLS, TRUTH_COLS):
+        if not learned:
+            weights[pred_col] = uniform.copy()
+            continue
         X = np.column_stack([df[pred_col].values for df in train_dfs])
         y = train_dfs[0][truth_col].values
         valid = np.isfinite(X).all(axis=1) & np.isfinite(y)
@@ -191,6 +204,7 @@ def main():
     os.makedirs(ensemble_dir, exist_ok=True)
     info = {
         "name": ensemble_name,
+        "weighting": args.weighting,
         "model": args.model,
         "seeds": seeds,
         "selected_months": args.selected_months,

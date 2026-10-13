@@ -1,8 +1,8 @@
-"""Fit a global convex ensemble from per-pixel result CSVs and save weights + predictions.
+"""Build a cross-model ensemble from per-pixel result CSVs and save weights + predictions.
 
-Fits ensemble weights on training pixels, then applies to val and test.
-This makes the global ensemble directly comparable to the regional ensemble
-(ensemble_regional.py), which also fits on training.
+By default (--weighting equal, as in the paper) the ensemble is the plain per-pixel
+average of the models. --weighting learned instead fits per-date convex weights on
+the training pixels (needs the train CSVs) and applies them to val and test.
 
 Works with the per-model/per-seed results directory structure:
     results/{months_sub}/{model_name}/seed_42_{train,val,test}.csv
@@ -107,6 +107,11 @@ def fit_ensemble_weights(val_dfs, methods, min_rows=20):
     return weights
 
 
+def equal_ensemble_weights(n_models):
+    """Uniform per-date weights, i.e. a plain average of the models."""
+    return {pred_col: np.full(n_models, 1.0 / n_models) for pred_col in PRED_COLS}
+
+
 def apply_ensemble_weights(dfs, weights):
     """Apply learned weights to produce a blended DataFrame."""
     df_out = dfs[0].copy()
@@ -142,6 +147,11 @@ def main():
         "--name", type=str, default=None,
         help="Ensemble name for output files.",
     )
+    parser.add_argument(
+        "--weighting", choices=["equal", "learned"], default="equal",
+        help="equal: plain average of the models (paper). "
+             "learned: convex weights fitted on training predictions.",
+    )
     args = parser.parse_args()
 
     months_sub = f"m{months_to_str(args.selected_months)}"
@@ -156,6 +166,7 @@ def main():
         args.name = "ensemble_" + "_".join(short_names)
 
     print(f"Ensemble name: {args.name}")
+    print(f"Weighting: {args.weighting}")
     print(f"Methods: {args.methods}")
     print(f"Results dir: {results_base}")
 
@@ -176,23 +187,26 @@ def main():
         print(f"  Seed: {seed}")
         print(f"{'='*60}")
 
-        # Load train, val, and test CSVs for this seed
-        train_dfs = [load_seed_csv(results_base, m, seed, "train") for m in args.methods]
+        # Load val and test CSVs for this seed (train CSVs only to fit learned weights)
+        learned = args.weighting == "learned"
+        train_dfs = [load_seed_csv(results_base, m, seed, "train") for m in args.methods] if learned else []
         val_dfs = [load_seed_csv(results_base, m, seed, "val") for m in args.methods]
         test_dfs = [load_seed_csv(results_base, m, seed, "test") for m in args.methods]
 
         # Verify row alignment
         for split_name, dfs in [("train", train_dfs), ("val", val_dfs), ("test", test_dfs)]:
-            for i, m in enumerate(args.methods):
+            for i in range(1, len(dfs)):
                 for col in ["years", "HLStile", "SiteID", "row", "col"]:
                     if not (dfs[0][col] == dfs[i][col]).all():
-                        raise ValueError(f"{split_name} row mismatch: {args.methods[0]} vs {m} on '{col}'")
+                        raise ValueError(f"{split_name} row mismatch: {args.methods[0]} vs {args.methods[i]} on '{col}'")
 
-        # Fit weights on training data
-        weights = fit_ensemble_weights(train_dfs, args.methods)
+        if learned:
+            weights = fit_ensemble_weights(train_dfs, args.methods)
+        else:
+            weights = equal_ensemble_weights(len(args.methods))
         all_weights[seed] = weights
 
-        print("\nWeights (fitted on training):")
+        print("\nWeights (fitted on training):" if learned else "\nWeights (equal):")
         for col, w in weights.items():
             date = col.split("_")[0]
             w_str = "  ".join(f"{args.methods[i]}: {w[i]:.3f}" for i in range(len(args.methods)))
@@ -228,6 +242,7 @@ def main():
 
     ensemble_info = {
         "name": args.name,
+        "weighting": args.weighting,
         "methods": args.methods,
         "selected_months": args.selected_months,
         "weights_per_seed": {

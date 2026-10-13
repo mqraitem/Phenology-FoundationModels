@@ -2,6 +2,9 @@
 # Create all ensembles for all month subsets.
 # Run after eval_to_dataframe.py has exported per-seed CSVs for all models.
 #
+# Every ensemble is a plain per-pixel average (the scripts' default
+# --weighting equal); pass --weighting learned for convex weights fit on train.
+#
 # Cross-model ensembles use ALL common seeds (per-seed paired ensembling, so
 # variance comes for free across seeds).
 # Intra-model "× 3" ensembles use 3 disjoint seed groups so we can report
