@@ -4,7 +4,10 @@ Usage:
     python misc_scripts/benchmark_inference.py [--n_tiles 5] [--device cuda]
 
 Measures wall-clock time to process tiles (330x330) with random inputs.
-No real data or checkpoints needed — models are randomly initialized.
+No real data or checkpoints needed — models are randomly initialized, but built
+with the same configuration as the selected checkpoints (Presto with its NDVI
+token group; Prithvi with time/location encoding and 4 fusion layers). All models
+run under the same mixed-precision autocast.
 Model names in the output CSV match those used in results_overview_notebook.ipynb.
 """
 
@@ -25,6 +28,7 @@ TILE_SIZE = 330
 N_BANDS = 6
 N_CLASSES = 4
 CROP_SIZE = 32
+PRITHVI_N_LAYERS = 4  # fusion-head depth of the selected Prithvi checkpoints
 # STRIDE = path_config.get_eval_stride()
 STRIDE = 10
 
@@ -114,6 +118,7 @@ def benchmark_prithvi(T, n_tiles, device, batch_size=None):
     model = PrithviPhenology(
         config["pretrained_cfg"], prithvi_ckpt_path=None,
         n_classes=N_CLASSES, model_size="100m",
+        feed_timeloc=True, n_layers=PRITHVI_N_LAYERS,
     ).to(device).eval()
 
     temporal_coords = torch.zeros(T, 2)
@@ -131,7 +136,7 @@ def benchmark_prithvi(T, n_tiles, device, batch_size=None):
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
                 t0 = time.perf_counter()
-                with torch.no_grad():
+                with torch.no_grad(), torch.amp.autocast(device):
                     batched_sliding_window(model, dummy, CROP_SIZE, device,
                                            tile_size=TILE_SIZE, stride=STRIDE,
                                            batch_size=bs,
@@ -157,7 +162,7 @@ def benchmark_prithvi(T, n_tiles, device, batch_size=None):
 
     # Warm up
     dummy = torch.randn(1, N_BANDS, T, TILE_SIZE, TILE_SIZE)
-    with torch.no_grad():
+    with torch.no_grad(), torch.amp.autocast(device):
         batched_sliding_window(model, dummy, CROP_SIZE, device,
                                tile_size=TILE_SIZE, stride=STRIDE, batch_size=batch_size,
                                temporal_coords=temporal_coords,
@@ -169,7 +174,7 @@ def benchmark_prithvi(T, n_tiles, device, batch_size=None):
         x = torch.randn(1, N_BANDS, T, TILE_SIZE, TILE_SIZE)
         torch.cuda.synchronize()
         t0 = time.perf_counter()
-        with torch.no_grad():
+        with torch.no_grad(), torch.amp.autocast(device):
             batched_sliding_window(model, x, CROP_SIZE, device,
                                    tile_size=TILE_SIZE, stride=STRIDE, batch_size=batch_size,
                                temporal_coords=temporal_coords,
@@ -188,7 +193,7 @@ def benchmark_presto(T, n_tiles, device, chunk_size=None):
 
     model = PrestoPhenologyModel(
         num_classes=N_CLASSES, freeze_encoder=False,
-        feed_timeloc=True,
+        feed_timeloc=True, use_ndvi=True,
     ).to(device).eval()
 
     # Dummy month and latlons
@@ -275,12 +280,13 @@ def benchmark_ensemble(T, n_tiles, device, transformer_cs=1000, presto_cs=2048, 
     prithvi = PrithviPhenology(
         config["pretrained_cfg"], prithvi_ckpt_path=None,
         n_classes=N_CLASSES, model_size="100m",
+        feed_timeloc=True, n_layers=PRITHVI_N_LAYERS,
     ).to(device).eval()
     prithvi = torch.compile(prithvi)
 
     presto = PrestoPhenologyModel(
         num_classes=N_CLASSES, freeze_encoder=False,
-        feed_timeloc=True,
+        feed_timeloc=True, use_ndvi=True,
     ).to(device).eval()
     presto = torch.compile(presto)
 
@@ -293,15 +299,13 @@ def benchmark_ensemble(T, n_tiles, device, transformer_cs=1000, presto_cs=2048, 
     # Warm up
     dummy = torch.randn(1, N_BANDS, T, TILE_SIZE, TILE_SIZE, device=device)
     dummy_cpu = dummy.cpu()
-    with torch.no_grad():
-        with torch.amp.autocast(device):
-            transformer(dummy, chunk_size=transformer_cs)
+    with torch.no_grad(), torch.amp.autocast(device):
+        transformer(dummy, chunk_size=transformer_cs)
         batched_sliding_window(prithvi, dummy_cpu, CROP_SIZE, device,
                                tile_size=TILE_SIZE, stride=STRIDE, batch_size=prithvi_bs,
                                temporal_coords=temporal_coords,
                                location_coords=location_coords)
-        with torch.amp.autocast(device):
-            presto(dummy, latlons=latlons, month=month_tensor, chunk_size=presto_cs)
+        presto(dummy, latlons=latlons, month=month_tensor, chunk_size=presto_cs)
     torch.cuda.synchronize()
 
     times = []
@@ -310,15 +314,13 @@ def benchmark_ensemble(T, n_tiles, device, transformer_cs=1000, presto_cs=2048, 
         x_cpu = x.cpu()
         torch.cuda.synchronize()
         t0 = time.perf_counter()
-        with torch.no_grad():
-            with torch.amp.autocast(device):
-                transformer(x, chunk_size=transformer_cs)
+        with torch.no_grad(), torch.amp.autocast(device):
+            transformer(x, chunk_size=transformer_cs)
             batched_sliding_window(prithvi, x_cpu, CROP_SIZE, device,
                                    tile_size=TILE_SIZE, stride=STRIDE, batch_size=prithvi_bs,
-                               temporal_coords=temporal_coords,
-                               location_coords=location_coords)
-            with torch.amp.autocast(device):
-                presto(x, latlons=latlons, month=month_tensor, chunk_size=presto_cs)
+                                   temporal_coords=temporal_coords,
+                                   location_coords=location_coords)
+            presto(x, latlons=latlons, month=month_tensor, chunk_size=presto_cs)
         torch.cuda.synchronize()
         times.append(time.perf_counter() - t0)
 
